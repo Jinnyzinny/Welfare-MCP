@@ -1,6 +1,7 @@
 import os
 from typing import Optional, Dict, Any
 from fastapi_mcp import FastApiMCP
+from fetch_gov import fetch_gov24
 
 ServiceKey=os.getenv("WELFARE_API_KEY")# 여기도 수정해야함
 
