@@ -13,6 +13,7 @@ mcp = FastApiMCP(
     description="사용자의 기본 프로필(연령대, 소득 수준, 경제활동 상태)을 수집합니다."
 )
 def collect_basic_profile(
+    # 나이 구간을 3가지로 단순화
     age_group: Literal["YOUTH", "ADULT", "SENIOR"],
     income_level: Literal[
         "BELOW_MEDIAN_50",
@@ -21,6 +22,7 @@ def collect_basic_profile(
         "ABOVE_MEDIAN_150",
         "UNKNOWN"
     ],
+    # 고용 상태를 5가지로 분류
     employment_status: Literal[
         "EMPLOYED",
         "UNEMPLOYED",
@@ -30,15 +32,15 @@ def collect_basic_profile(
     ]
 ) -> dict:
     """
-    사용자 기본 프로필을 생성합니다.
-    연령대, 가구 소득 수준, 경제활동 상태를 한 번에 수집합니다.
+    # 사용자 기본 프로필을 생성합니다.
+    # 연령대, 가구 소득 수준, 경제활동 상태를 한 번에 수집합니다.
     """
     profile = UserProfile(
         age_group=age_group,
         income_level=income_level,
         employment_status=employment_status
     )
-    return profile.dict()
+    return profile.model_dump()
 
 @mcp.tool(
     name="collect_household_profile",
@@ -75,7 +77,7 @@ def collect_household_profile(
     else:
         profile.special_status = special_status
 
-    return profile.dict()
+    return profile.model_dump()
 
 @mcp.tool(
     name="collect_asset_profile",
@@ -97,4 +99,4 @@ def collect_asset_profile(
         "has_vehicle": has_vehicle
     }
 
-    return profile.dict()
+    return profile.model_dump()
