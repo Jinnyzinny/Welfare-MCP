@@ -1,7 +1,7 @@
 from typing import Literal, List
 from fastapi_mcp import FastApiMCP
 
-from ...fastapi.entity.user_profile import UserProfile
+from ...fastapi.entity.UserProfile import UserProfile
 
 mcp = FastApiMCP(
     name="Welfare Services MCP",
