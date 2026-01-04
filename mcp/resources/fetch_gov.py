@@ -1,3 +1,6 @@
+from typing import Any, Dict
+import httpx
+
 async def fetch_gov24(
     url: str,
     params: Dict[str, Any]

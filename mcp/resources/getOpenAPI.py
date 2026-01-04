@@ -1,5 +1,4 @@
 import os
-import httpx
 from typing import Optional, Dict, Any
 from fastapi_mcp import FastApiMCP
 
