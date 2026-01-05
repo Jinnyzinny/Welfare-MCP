@@ -47,12 +47,14 @@ jobs:
       - name: Deploy to LightSail
         run: |
           ssh ${{ secrets.LIGHTSAIL_USER }}@${{ secrets.LIGHTSAIL_HOST }} << 'EOF'
-            set -e
+          set -e
+          cd /home/ubuntu/app
 
-            docker pull jinnyzinny/welfare-mcp:latest
-            docker-compose -f /home/ubuntu/app/docker-compose.yml down
-            docker-compose -f /home/ubuntu/app/docker-compose.yml up -d
+          docker-compose pull server
+          docker-compose up -d server postgres
 
-            docker ps
-            curl -f https://welfare-mcpserver.shop/docs
+          # 🔥 핵심: nginx만 재시작
+          docker-compose restart nginx
+
+          docker ps
           EOF
