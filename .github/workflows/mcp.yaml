@@ -50,7 +50,7 @@ jobs:
             set -e
 
             docker pull jinnyzinny/welfare-mcp:latest
-            docker-compose down
+            docker-compose -f /app/docker-compose.yml down
             docker-compose -f /app/docker-compose.yml up -d
             docker ps
             curl -f https://welfare-mcpserver.shop/docs
