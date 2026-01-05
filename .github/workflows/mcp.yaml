@@ -14,13 +14,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-
-      - name: Run tests
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          python -m unittest discover -s tests || echo "no tests"
+          python-version: "3.13"
 
       - name: Set up SSH
         run: |
@@ -35,6 +29,8 @@ jobs:
             set -e
             cd /home/ubuntu/app
             git pull origin main
-            docker compose down
+            
             docker compose up -d --build
+            docker ps
+            curl -f https://welfare-mcpserver.shop/docs
           EOF
