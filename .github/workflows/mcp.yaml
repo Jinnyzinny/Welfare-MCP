@@ -51,9 +51,7 @@ jobs:
 
             docker pull jinnyzinny/welfare-mcp:latest
             docker-compose down
-            cd /app
-            docker-compose up -d
-
+            docker-compose -f /app/docker-compose.yml up -d
             docker ps
             curl -f https://welfare-mcpserver.shop/docs
           EOF
