@@ -51,7 +51,7 @@ jobs:
 
             docker pull jinnyzinny/welfare-mcp:latest
             docker-compose down
-            cd /home/ubuntu/app
+            cd /app
             docker-compose up -d
 
             docker ps
