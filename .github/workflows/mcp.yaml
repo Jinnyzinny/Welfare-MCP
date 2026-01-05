@@ -2,7 +2,7 @@ name: AWS LightSail Deployment
 on:
   push:
     branches:
-      - main
+      - master
 jobs:
   build-test-deploy:
     runs-on: ubuntu-latest
@@ -29,7 +29,7 @@ jobs:
             set -e
             cd /home/ubuntu/app
             git pull origin main
-            
+
             docker compose up -d --build
             docker ps
             curl -f https://welfare-mcpserver.shop/docs
