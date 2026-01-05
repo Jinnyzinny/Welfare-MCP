@@ -1,4 +1,4 @@
-name: AWS LightSail Deployment
+name: AWS LightSail DockerHub Deployment
 
 on:
   push:
@@ -6,18 +6,36 @@ on:
       - master
 
 jobs:
-  build-test-deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ 코드 체크아웃
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
+      # 2️⃣ Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
+      # 3️⃣ Docker Hub 로그인
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # 4️⃣ Docker 이미지 빌드 & 푸시
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            jinnyzinny/welfare-mcp:latest
+            jinnyzinny/welfare-mcp:${{ github.sha }}
+
+      # 5️⃣ SSH 설정
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
@@ -25,19 +43,16 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.LIGHTSAIL_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Add SSH key to agent
-        run: |
-          eval "$(ssh-agent -s)"
-          ssh-add ~/.ssh/id_ed25519
-
-      - name: Deploy to Lightsail
+      # 6️⃣ LightSail 배포
+      - name: Deploy to LightSail
         run: |
           ssh ${{ secrets.LIGHTSAIL_USER }}@${{ secrets.LIGHTSAIL_HOST }} << 'EOF'
             set -e
-            cd /home/ubuntu/app
-            git pull origin master
 
-            docker compose up -d --build
+            docker pull jinnyzinny/welfare-mcp:latest
+            docker compose down
+            docker compose up -d
+
             docker ps
             curl -f https://welfare-mcpserver.shop/docs
           EOF
