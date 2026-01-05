@@ -1,8 +1,10 @@
 name: AWS LightSail Deployment
+
 on:
   push:
     branches:
       - master
+
 jobs:
   build-test-deploy:
     runs-on: ubuntu-latest
@@ -14,7 +16,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.10"
 
       - name: Set up SSH
         run: |
@@ -23,12 +25,17 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.LIGHTSAIL_HOST }} >> ~/.ssh/known_hosts
 
+      - name: Add SSH key to agent
+        run: |
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_ed25519
+
       - name: Deploy to Lightsail
         run: |
           ssh ${{ secrets.LIGHTSAIL_USER }}@${{ secrets.LIGHTSAIL_HOST }} << 'EOF'
             set -e
             cd /home/ubuntu/app
-            git pull origin main
+            git pull origin master
 
             docker compose up -d --build
             docker ps
