@@ -2,6 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+ENV PYTHONPATH=/app
+
 RUN pip install --no-cache-dir fastapi uvicorn httpx fastapi-mcp
 
 COPY . .
