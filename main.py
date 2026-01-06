@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi_mcp import FastApiMCP
 
-from fastapi.responses import StreamingResponse
 import httpx
 from httpx import AsyncClient
 
@@ -13,10 +12,6 @@ mcp = FastApiMCP(
     description="MCP server for welfare services",
     http_client=httpx.AsyncClient(timeout=10.0)
 )
-
-from mcp.tools import check_eligibility
-from mcp.tools import required_documents
-from mcp.tools import user_profile
 
 mcp.mount_http(app,"/mcp")
 
