@@ -14,17 +14,11 @@ mcp = FastApiMCP(
     http_client=httpx.AsyncClient(timeout=10.0)
 )
 
+from .mcp.tools import check_eligibility
+from .mcp.tools import required_documents
+from .mcp.tools import user_profile
+
 mcp.mount_http(app,"/mcp")
-
-@app.get("/mcp")
-async def root():
-    return {"message": "Welcome to the Welfare MCP Server"}
-
-@app.post("/mcp")
-async def proxy_request():
-    async with AsyncClient(timeout=10.0) as client:
-        response = await client.post("http://example.com/api", json={"key": "value"})
-        return StreamingResponse(response.aiter_bytes(), status_code=response.status_code, headers=response.headers)
 
 if __name__ == "__main__":
     import uvicorn
