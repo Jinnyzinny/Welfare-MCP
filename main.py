@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi_mcp import FastApiMCP
 
 from fastapi.responses import StreamingResponse
+import httpx
 from httpx import AsyncClient
 
 app = FastAPI()
