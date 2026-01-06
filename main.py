@@ -15,11 +15,11 @@ mcp = FastApiMCP(
 
 mcp.mount_http(app,"/mcp")
 
-@app.get("/")
+@app.get("/mcp")
 async def root():
     return {"message": "Welcome to the Welfare MCP Server"}
 
-@app.post("/")
+@app.post("/mcp")
 async def proxy_request():
     async with AsyncClient(timeout=10.0) as client:
         response = await client.post("http://example.com/api", json={"key": "value"})
