@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi_mcp import FastApiMCP
 
+from fastapi.responses import StreamingResponse
+
 app = FastAPI()
 
 mcp = FastApiMCP(
@@ -10,11 +12,17 @@ mcp = FastApiMCP(
 )
 mcp.mount_http()
 
-# Auto-generated operation_id (something like "read_user_users__user_id__get")
-@app.get("/")
-async def read_user(user_id: int):
-    return {"user_id": user_id}
+@app.get("/mcp")
+async def read_mcp():
+    return StreamingResponse(
+        media_type={"text/event-stream", "application/json"},
+        content={"message": "MCP server is running"})
 
+@app.post("/mcp")
+async def post_mcp():
+    return StreamingResponse(
+        media_type={"text/event-stream", "application/json"},
+        content={"message": "MCP server received a POST request"})
 
 if __name__ == "__main__":
     import uvicorn
