@@ -14,9 +14,9 @@ mcp = FastApiMCP(
     http_client=httpx.AsyncClient(timeout=10.0)
 )
 
-from .mcp.tools import check_eligibility
-from .mcp.tools import required_documents
-from .mcp.tools import user_profile
+from mcp.tools import check_eligibility
+from mcp.tools import required_documents
+from mcp.tools import user_profile
 
 mcp.mount_http(app,"/mcp")
 
