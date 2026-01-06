@@ -1,12 +1,7 @@
 from user_profile import UserProfile
-from fastapi_mcp import FastApiMCP
+from main import mcp
 
 from ...fastapi.entity.EligibilityResult import EligibilityResult
-
-mcp= FastApiMCP(
-    name="Welfare Services MCP"
-    ,description="MCP for accessing welfare services information"
-)
 
 @mcp.tool(
     name="check_eligibility",

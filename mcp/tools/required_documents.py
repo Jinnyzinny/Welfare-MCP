@@ -1,11 +1,6 @@
 from typing import List
 from ...fastapi.entity.UserProfile import UserProfile
-from fastapi_mcp import FastApiMCP
-
-mcp= FastApiMCP(
-    name="Welfare Services MCP",
-    description="MCP for accessing welfare services information"
-)
+from main import mcp
 
 
 @mcp.tool(
