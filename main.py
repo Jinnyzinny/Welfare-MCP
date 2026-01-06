@@ -16,6 +16,9 @@ mcp = FastApiMCP(
 )
 
 from welfare_mcp.tools import user_profile, required_documents, check_eligibility
+print("=== MCP TOOLS ===")
+print(mcp_container.mcp.tools)
+print("=================")
 
 mcp.mount_http(app,"/mcp")
 
