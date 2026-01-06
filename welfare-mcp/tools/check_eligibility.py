@@ -1,5 +1,5 @@
 from user_profile import UserProfile
-from main import mcp
+from mcp_container import mcp
 
 from ...fastapi.entity.EligibilityResult import EligibilityResult
 

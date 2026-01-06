@@ -1,6 +1,6 @@
 from typing import List
 from ...fastapi.entity.UserProfile import UserProfile
-from main import mcp
+from mcp_container import mcp
 
 
 @mcp.tool(
