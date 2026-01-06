@@ -1,5 +1,5 @@
 from typing import Literal, List
-from main import mcp
+from mcp_container import mcp
 from ...fastapi.entity.UserProfile import UserProfile
 
 @mcp.tool(
