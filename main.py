@@ -15,7 +15,7 @@ mcp = FastApiMCP(
 def ping() -> StreamingResponse:
     return "pong"
 
-mcp.mount(app, "/mcp")
+mcp.mount_http(app,"/mcp")
 
 if __name__ == "__main__":
     import uvicorn
