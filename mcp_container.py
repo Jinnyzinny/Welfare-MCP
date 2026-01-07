@@ -48,6 +48,7 @@ for route in base_app.routes:
 app = CORSMiddleware(
     base_app,
     allow_origins=["*"],  # Configure appropriately for production
+    allow_headers=["*"],  # Allow all headers
     allow_methods=["GET", "POST", "DELETE"],  # MCP streamable HTTP methods
     expose_headers=["Mcp-Session-Id"],
 )
