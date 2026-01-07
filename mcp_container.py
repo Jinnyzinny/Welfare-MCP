@@ -14,6 +14,7 @@ mcp = FastMCP(
     name="Welfare MCP Server",
     stateless_http=True,
     json_response=True,
+    host="welfare-mcpserver.shop"
 )
 
 mcp_http_app = mcp.streamable_http_app()
