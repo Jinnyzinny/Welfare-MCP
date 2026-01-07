@@ -2,7 +2,7 @@ from typing import Literal, List
 from mcp_container import mcp
 from backend.entity.UserProfile import UserProfile
 
-from backend.dto.request.CollectHouseHoldProfileRequestDto import CollectHouseHoldProrfileRequestDto
+from backend.dto.request.CollectHouseHoldProfileRequestDto import CollectHouseHoldProfileRequestDto
 from backend.dto.request.CollectAssetProfileReqeustDto import CollectAssetProfileRequestDto
 
 @mcp.tool(
@@ -44,7 +44,7 @@ def collect_basic_profile(
     description="가구 형태 및 특수 상태를 수집합니다."
 )
 def collect_household_profile(
-    request: CollectHouseHoldProrfileRequestDto
+    request: CollectHouseHoldProfileRequestDto
 ) -> dict:
     """
     가구 형태 및 특수 상태를 추가로 수집합니다.
