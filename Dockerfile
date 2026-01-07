@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-WORKDIR /mcp_contest
+WORKDIR /app
 
 ENV PYTHONPATH=/mcp_contest
 
