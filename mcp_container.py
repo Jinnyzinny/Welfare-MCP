@@ -4,7 +4,7 @@ import contextlib
 from mcp.server.fastmcp import FastMCP
 
 from starlette.applications import Starlette
-from starlette.routing import Mount
+from starlette.routing import Mount,Host
 from starlette.middleware.cors import CORSMiddleware
 
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -28,7 +28,8 @@ async def lifespan(app: Starlette):
 
 base_app=Starlette(
     routes=[
-        Mount("/", mcp_http_app) ,
+        Host("welfare-mcpserver.shop"),
+        Mount("/", mcp_http_app),
     ],
     lifespan=lifespan,
 )
@@ -53,4 +54,4 @@ app = CORSMiddleware(
     expose_headers=["Mcp-Session-Id"],
 )
 
-# mcp_http_app.state.allow_origins = ["*"]  # Configure appropriately for production
+mcp_http_app.state.allow_origins = ["*"]  # Configure appropriately for production
