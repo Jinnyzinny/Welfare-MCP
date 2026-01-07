@@ -26,7 +26,7 @@ async def lifespan(app: Starlette):
 
 base_app=Starlette(
     routes=[
-        Mount("/", mcp_http_app) ,
+        Mount("/mcp", mcp_http_app) ,
     ],
     lifespan=lifespan,
 )
