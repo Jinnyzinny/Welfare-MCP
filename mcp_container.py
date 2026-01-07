@@ -24,7 +24,7 @@ async def lifespan(app: Starlette):
         yield
 
 
-app=Starlette(
+base_app=Starlette(
     routes=[
         Mount("/mcp", mcp_http_app) ,
     ],
@@ -32,8 +32,8 @@ app=Starlette(
 )
 
 # Then wrap it with CORS middleware
-starlette_app = CORSMiddleware(
-    app,
+app = CORSMiddleware(
+    base_app,
     allow_origins=["*"],  # Configure appropriately for production
     allow_methods=["GET", "POST", "DELETE"],  # MCP streamable HTTP methods
     expose_headers=["Mcp-Session-Id"],
