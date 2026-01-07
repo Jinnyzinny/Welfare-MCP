@@ -1,7 +1,6 @@
 from typing import List
-from ...fastapi.entity.UserProfile import UserProfile
+from backend.entity.UserProfile import UserProfile
 from mcp_container import mcp
-
 
 @mcp.tool(
     name="required_documents",

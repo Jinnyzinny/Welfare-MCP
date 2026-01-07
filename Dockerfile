@@ -1,8 +1,8 @@
 FROM python:3.11-slim
 
-WORKDIR /app
+WORKDIR /mcp_contest
 
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/mcp_contest
 
 RUN pip install --no-cache-dir fastapi uvicorn httpx fastapi-mcp
 

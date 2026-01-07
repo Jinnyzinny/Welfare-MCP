@@ -1,6 +1,6 @@
 from typing import Literal, List
 from mcp_container import mcp
-from ...fastapi.entity.UserProfile import UserProfile
+from backend.entity.UserProfile import UserProfile
 
 @mcp.tool(
     name="collect_basic_profile",
