@@ -1,7 +1,7 @@
 from user_profile import UserProfile
 from mcp_container import mcp
 
-from ...fastapi.entity.EligibilityResult import EligibilityResult
+from backend.entity.EligibilityResult import EligibilityResult
 
 @mcp.tool(
     name="check_eligibility",

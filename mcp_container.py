@@ -1,6 +1,6 @@
 # mcp_container.py
 import httpx
-from fastapi import FastAPI
+from backend import FastAPI
 from fastapi_mcp import FastApiMCP
 
 app = FastAPI()
