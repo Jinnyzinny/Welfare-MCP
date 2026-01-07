@@ -7,6 +7,8 @@ from starlette.applications import Starlette
 from starlette.routing import Mount
 from starlette.middleware.cors import CORSMiddleware
 
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+
 # Create an MCP server
 mcp = FastMCP(
     name="Welfare MCP Server",
@@ -29,6 +31,10 @@ base_app=Starlette(
         Mount("/", mcp_http_app) ,
     ],
     lifespan=lifespan,
+)
+
+base_app.add_middleware(
+    TrustedHostMiddleware, allowed_hosts=["welfare-mcpserver.shop", "localhost", "*.shop"]
 )
 
 # base_app 정의 아래에 추가하여 실제 등록된 경로 확인
