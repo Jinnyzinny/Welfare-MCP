@@ -44,7 +44,7 @@ for route in base_app.routes:
         for sub_route in route.app.routes:
             print(f"  -> Sub-Route: {sub_route.path}")
 
-mcp_http_app.state.allow_origins = ["*"]  # Configure appropriately for production
+mcp_http_app.state["allowed_origins"] = ["*"]  # Configure appropriately for production
 
 # Then wrap it with CORS middleware
 app = CORSMiddleware(
