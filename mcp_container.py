@@ -31,6 +31,13 @@ base_app=Starlette(
     lifespan=lifespan,
 )
 
+# base_app 정의 아래에 추가하여 실제 등록된 경로 확인
+for route in base_app.routes:
+    print(f"Route: {route.path}")
+    if hasattr(route, 'app') and hasattr(route.app, 'routes'):
+        for sub_route in route.app.routes:
+            print(f"  -> Sub-Route: {sub_route.path}")
+
 # Then wrap it with CORS middleware
 app = CORSMiddleware(
     base_app,
