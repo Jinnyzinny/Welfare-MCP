@@ -28,7 +28,6 @@ async def lifespan(app: Starlette):
 
 base_app=Starlette(
     routes=[
-        Host("welfare-mcpserver.shop"),
         Mount("/", mcp_http_app),
     ],
     lifespan=lifespan,
@@ -45,6 +44,8 @@ for route in base_app.routes:
         for sub_route in route.app.routes:
             print(f"  -> Sub-Route: {sub_route.path}")
 
+mcp_http_app.state.allow_origins = ["*"]  # Configure appropriately for production
+
 # Then wrap it with CORS middleware
 app = CORSMiddleware(
     base_app,
@@ -53,5 +54,3 @@ app = CORSMiddleware(
     allow_methods=["GET", "POST", "DELETE"],  # MCP streamable HTTP methods
     expose_headers=["Mcp-Session-Id"],
 )
-
-mcp_http_app.state.allow_origins = ["*"]  # Configure appropriately for production
