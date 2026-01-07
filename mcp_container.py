@@ -34,18 +34,12 @@ base_app=Starlette(
     lifespan=lifespan,
 )
 
-# base_app.add_middleware(
-#     TrustedHostMiddleware, allowed_hosts=["welfare-mcpserver.shop", "localhost", "*.shop"]
-# )
-
 # base_app 정의 아래에 추가하여 실제 등록된 경로 확인
 for route in base_app.routes:
     print(f"Route: {route.path}")
     if hasattr(route, 'app') and hasattr(route.app, 'routes'):
         for sub_route in route.app.routes:
             print(f"  -> Sub-Route: {sub_route.path}")
-
-# mcp_http_app.state["allowed_origins"] = ["*"]  # Configure appropriately for production
 
 # Then wrap it with CORS middleware
 app = CORSMiddleware(
