@@ -2,8 +2,10 @@ from typing import Optional, List, Literal, Dict
 from pydantic import BaseModel
 
 class UserProfile(BaseModel):
+    # 연령대를 3가지로 구분
     age_group: Optional[Literal["YOUTH", "ADULT", "SENIOR"]] = None
 
+    # 소득 수준을 5단계로 구분
     income_level: Optional[
         Literal[
             "BELOW_MEDIAN_50",
@@ -13,7 +15,7 @@ class UserProfile(BaseModel):
             "UNKNOWN"
         ]
     ] = None
-
+    # 고용 상태를 5가지로 분류
     employment_status: Optional[
         Literal[
             "EMPLOYED",
@@ -23,7 +25,7 @@ class UserProfile(BaseModel):
             "UNKNOWN"
         ]
     ] = None
-
+    # 가구 형태를 5가지로 구분
     household_type: Optional[
         Literal[
             "SINGLE",
