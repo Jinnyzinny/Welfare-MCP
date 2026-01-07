@@ -1,4 +1,4 @@
-from mcp_container import mcp
+from mcp_container import mcp, app
 
 from starlette.middleware.cors import CORSMiddleware
 
@@ -9,9 +9,8 @@ from welfare_mcp.tools.required_documents import required_documents
 # from mcp_container import app
 if __name__ == "__main__":
     mcp.run(transport="streamable-http", 
-            mount_path="/mcp", 
-            host="localhost", 
-            port=8000)
+            mount_path="/mcp"
+            )
 
 # Then wrap it with CORS middleware
 # app = CORSMiddleware(

@@ -5,7 +5,7 @@ from mcp.server.fastmcp import FastMCP
 
 from starlette.applications import Starlette
 from starlette.routing import Mount
-# from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.cors import CORSMiddleware
 
 # Create an MCP server
 mcp = FastMCP(
@@ -32,9 +32,9 @@ base_app=Starlette(
 )
 
 # Then wrap it with CORS middleware
-# app = CORSMiddleware(
-#     base_app,
-#     allow_origins=["*"],  # Configure appropriately for production
-#     allow_methods=["GET", "POST", "DELETE"],  # MCP streamable HTTP methods
-#     expose_headers=["Mcp-Session-Id"],
-# )
+app = CORSMiddleware(
+    base_app,
+    allow_origins=["*"],  # Configure appropriately for production
+    allow_methods=["GET", "POST", "DELETE"],  # MCP streamable HTTP methods
+    expose_headers=["Mcp-Session-Id"],
+)
