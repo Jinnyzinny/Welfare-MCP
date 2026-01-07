@@ -4,7 +4,7 @@ WORKDIR /mcp_contest
 
 ENV PYTHONPATH=/mcp_contest
 
-RUN pip install --no-cache-dir fastapi uvicorn httpx fastapi-mcp
+RUN pip install --no-cache-dir mcp uvicorn starlette
 
 COPY . .
 

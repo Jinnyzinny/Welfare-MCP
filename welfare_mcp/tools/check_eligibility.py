@@ -1,4 +1,4 @@
-from user_profile import UserProfile
+from backend.entity.UserProfile import UserProfile
 from mcp_container import mcp
 
 from backend.entity.EligibilityResult import EligibilityResult
