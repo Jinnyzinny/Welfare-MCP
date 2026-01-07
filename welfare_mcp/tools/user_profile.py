@@ -2,6 +2,9 @@ from typing import Literal, List
 from mcp_container import mcp
 from backend.entity.UserProfile import UserProfile
 
+from backend.dto.request.CollectHouseHoldProfileRequestDto import CollectHouseHoldProrfileRequestDto
+from backend.dto.request.CollectAssetProfileReqeustDto import CollectAssetProfileRequestDto
+
 @mcp.tool(
     name="collect_basic_profile",
     description="사용자의 기본 프로필(연령대, 소득 수준, 경제활동 상태)을 수집합니다."
@@ -41,35 +44,19 @@ def collect_basic_profile(
     description="가구 형태 및 특수 상태를 수집합니다."
 )
 def collect_household_profile(
-    current_profile: dict,
-    household_type: Literal[
-        "SINGLE",
-        "PARENT_CHILD",
-        "COUPLE",
-        "SINGLE_PARENT",
-        "OTHER"
-    ],
-    special_status: List[
-        Literal[
-            "DISABLED",
-            "MULTICULTURAL",
-            "VETERAN",
-            "NONE"
-        ]
-    ]
+    request: CollectHouseHoldProrfileRequestDto
 ) -> dict:
     """
     가구 형태 및 특수 상태를 추가로 수집합니다.
     필요 시에만 호출되는 조건부 Tool입니다.
     """
-    profile = UserProfile(**current_profile)
+    profile = request.current_profile
+    profile.household_type = request.household_type
 
-    profile.household_type = household_type
-
-    if "NONE" in special_status:
+    if "NONE" in request.special_status:
         profile.special_status = []
     else:
-        profile.special_status = special_status
+        profile.special_status = request.special_status
 
     return profile.model_dump()
 
@@ -78,19 +65,17 @@ def collect_household_profile(
     description="재산 보유 여부를 수집합니다."
 )
 def collect_asset_profile(
-    current_profile: dict,
-    has_real_estate: bool,
-    has_vehicle: bool
+    request: CollectAssetProfileRequestDto
 ) -> dict:
     """
     재산 보유 여부를 수집합니다.
     금액이 아닌 '존재 여부'만 판단합니다.
     """
-    profile = UserProfile(**current_profile)
+    profile = request.current_profile.model_dump()
 
     profile.assets = {
-        "has_real_estate": has_real_estate,
-        "has_vehicle": has_vehicle
+        "has_real_estate": request.has_real_estate,
+        "has_vehicle": request.has_vehicle
     }
 
-    return profile.model_dump()
+    return profile
