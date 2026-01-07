@@ -33,9 +33,9 @@ base_app=Starlette(
     lifespan=lifespan,
 )
 
-base_app.add_middleware(
-    TrustedHostMiddleware, allowed_hosts=["welfare-mcpserver.shop", "localhost", "*.shop"]
-)
+# base_app.add_middleware(
+#     TrustedHostMiddleware, allowed_hosts=["welfare-mcpserver.shop", "localhost", "*.shop"]
+# )
 
 # base_app 정의 아래에 추가하여 실제 등록된 경로 확인
 for route in base_app.routes:
@@ -53,4 +53,4 @@ app = CORSMiddleware(
     expose_headers=["Mcp-Session-Id"],
 )
 
-mcp_http_app.state.allow_origins = ["*"]  # Configure appropriately for production
+# mcp_http_app.state.allow_origins = ["*"]  # Configure appropriately for production
