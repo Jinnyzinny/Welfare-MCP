@@ -38,3 +38,5 @@ app = CORSMiddleware(
     allow_methods=["GET", "POST", "DELETE"],  # MCP streamable HTTP methods
     expose_headers=["Mcp-Session-Id"],
 )
+
+mcp.settings.streamable_http_path="/"
