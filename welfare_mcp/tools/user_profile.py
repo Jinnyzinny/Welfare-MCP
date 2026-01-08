@@ -1,9 +1,7 @@
 from typing import Literal, List
+from pydantic import BaseModel
 from mcp_container import mcp
 from backend.entity.UserProfile import UserProfile
-
-from backend.dto.request.CollectHouseHoldProfileRequestDto import CollectHouseHoldProfileRequestDto
-from backend.dto.request.CollectAssetProfileReqeustDto import CollectAssetProfileRequestDto
 
 @mcp.tool(
     name="collect_basic_profile",
@@ -39,24 +37,57 @@ def collect_basic_profile(
     )
     return profile.model_dump()
 
+class CurrentProfile(BaseModel):
+    age_group: Literal["YOUTH", "ADULT", "SENIOR"]
+    income_level: Literal[
+        "BELOW_MEDIAN_50",
+        "MEDIAN_50_100",
+        "MEDIAN_100_150",
+        "ABOVE_MEDIAN_150",
+        "UNKNOWN"
+    ]
+    employment_status: Literal[
+        "EMPLOYED",
+        "UNEMPLOYED",
+        "STUDENT",
+        "SELF_EMPLOYED",
+        "UNKNOWN"
+    ]
+
 @mcp.tool(
     name="collect_household_profile",
     description="가구 형태 및 특수 상태를 수집합니다."
 )
 def collect_household_profile(
-    request: CollectHouseHoldProfileRequestDto
+    current_profile: CurrentProfile,
+    household_type: Literal[
+        "SINGLE",
+        "PARENT_CHILD",
+        "COUPLE",
+        "SINGLE_PARENT",
+        "OTHER"
+    ],
+    special_status: List[
+        Literal[
+            "DISABLED",
+            "MULTICULTURAL",
+            "VETERAN",
+            "NONE"
+        ]
+    ]
 ) -> dict:
     """
     가구 형태 및 특수 상태를 추가로 수집합니다.
     필요 시에만 호출되는 조건부 Tool입니다.
     """
-    profile = request.current_profile
-    profile.household_type = request.household_type
+    profile = UserProfile(**current_profile)
 
-    if "NONE" in request.special_status:
+    profile.household_type = household_type
+
+    if "NONE" in special_status:
         profile.special_status = []
     else:
-        profile.special_status = request.special_status
+        profile.special_status = special_status
 
     return profile.model_dump()
 
@@ -65,17 +96,19 @@ def collect_household_profile(
     description="재산 보유 여부를 수집합니다."
 )
 def collect_asset_profile(
-    request: CollectAssetProfileRequestDto
+    current_profile: CurrentProfile,
+    has_real_estate: bool,
+    has_vehicle: bool
 ) -> dict:
     """
     재산 보유 여부를 수집합니다.
     금액이 아닌 '존재 여부'만 판단합니다.
     """
-    profile = request.current_profile.model_dump()
+    profile = UserProfile(**current_profile)
 
     profile.assets = {
-        "has_real_estate": request.has_real_estate,
-        "has_vehicle": request.has_vehicle
+        "has_real_estate": has_real_estate,
+        "has_vehicle": has_vehicle
     }
 
-    return profile
+    return profile.model_dump()
