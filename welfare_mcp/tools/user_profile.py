@@ -64,14 +64,13 @@ def collect_household_profile(
         "SINGLE_PARENT",
         "OTHER"
     ],
-    special_status: List[
-        Literal[
+    special_status: Literal[
             "DISABLED",
             "MULTICULTURAL",
             "VETERAN",
             "NONE"
-        ]
     ]
+    
 ) -> dict:
     """
     가구 형태 및 특수 상태를 추가로 수집합니다.

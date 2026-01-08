@@ -4,7 +4,7 @@ WORKDIR /app
 
 ENV PYTHONPATH=/mcp_contest
 
-RUN pip install --no-cache-dir mcp uvicorn starlette
+RUN pip install --no-cache-dir mcp uvicorn starlette python-dotenv
 
 COPY . .
 
