@@ -1,5 +1,6 @@
 from backend.entity.UserProfile import UserProfile
 from mcp_container import mcp
+from typing import Optional, Literal
 
 from backend.entity.EligibilityResult import EligibilityResult
 
@@ -8,14 +9,51 @@ from backend.entity.EligibilityResult import EligibilityResult
     description="사용자 프로필과 서비스의 지원대상/선정기준을 비교하여 신청 가능성을 판단합니다."
 )
 def check_eligibility(
-    user_profile: dict,
-    service: dict
+        # 연령대를 3가지로 구분
+    age_group: Optional[Literal["YOUTH", "ADULT", "SENIOR"]] = None,
+
+    # 소득 수준을 5단계로 구분
+    income_level: Optional[
+        Literal[
+            "BELOW_MEDIAN_50",
+            "MEDIAN_50_100",
+            "MEDIAN_100_150",
+            "ABOVE_MEDIAN_150",
+            "UNKNOWN"
+        ]
+    ] = None,
+    # 고용 상태를 5가지로 분류
+    employment_status: Optional[
+        Literal[
+            "EMPLOYED",
+            "UNEMPLOYED",
+            "STUDENT",
+            "SELF_EMPLOYED",
+            "UNKNOWN"
+        ]
+    ] = None,
+    # 가구 형태를 5가지로 구분
+    household_type: Optional[
+        Literal[
+            "SINGLE",
+            "PARENT_CHILD",
+            "COUPLE",
+            "SINGLE_PARENT",
+            "OTHER"
+        ]
+    ] = None
+    # service: dict
 ) -> dict:
     """
     서비스의 자연어 조건을 UserProfile과 비교하여
     신청 가능 여부 및 사유를 반환합니다.
     """
-    profile = UserProfile(**user_profile)
+    profile = UserProfile(
+        age_group=age_group,
+        income_level=income_level,
+        employment_status=employment_status,
+        household_type=household_type
+    )
 
     reasons = []
     missing = []
