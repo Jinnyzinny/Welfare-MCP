@@ -1,5 +1,6 @@
 from typing import Any, Dict
 import httpx
+from mcp_container import mcp 
 
 # 공통으로 사용할 비동기 HTTP 클라이언트 함수
 
