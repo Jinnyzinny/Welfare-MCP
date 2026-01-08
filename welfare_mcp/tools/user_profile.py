@@ -37,29 +37,26 @@ def collect_basic_profile(
     )
     return profile.model_dump()
 
-class CurrentProfile(BaseModel):
-    age_group: Literal["YOUTH", "ADULT", "SENIOR"]
+@mcp.tool(
+    name="collect_household_profile",
+    description="가구 형태 및 특수 상태를 수집합니다."
+)
+def collect_household_profile(
+    age_group: Literal["YOUTH", "ADULT", "SENIOR"],
     income_level: Literal[
         "BELOW_MEDIAN_50",
         "MEDIAN_50_100",
         "MEDIAN_100_150",
         "ABOVE_MEDIAN_150",
         "UNKNOWN"
-    ]
+    ],
     employment_status: Literal[
         "EMPLOYED",
         "UNEMPLOYED",
         "STUDENT",
         "SELF_EMPLOYED",
         "UNKNOWN"
-    ]
-
-@mcp.tool(
-    name="collect_household_profile",
-    description="가구 형태 및 특수 상태를 수집합니다."
-)
-def collect_household_profile(
-    current_profile: CurrentProfile,
+    ],
     household_type: Literal[
         "SINGLE",
         "PARENT_CHILD",
@@ -80,9 +77,12 @@ def collect_household_profile(
     가구 형태 및 특수 상태를 추가로 수집합니다.
     필요 시에만 호출되는 조건부 Tool입니다.
     """
-    profile = UserProfile(**current_profile)
-
-    profile.household_type = household_type
+    profile = UserProfile(
+        age_group=age_group,
+        income_level=income_level,
+        employment_status=employment_status,
+        household_type=household_type,
+    )
 
     if "NONE" in special_status:
         profile.special_status = []
@@ -96,7 +96,21 @@ def collect_household_profile(
     description="재산 보유 여부를 수집합니다."
 )
 def collect_asset_profile(
-    current_profile: CurrentProfile,
+    age_group: Literal["YOUTH", "ADULT", "SENIOR"],
+    income_level: Literal[
+        "BELOW_MEDIAN_50",
+        "MEDIAN_50_100",
+        "MEDIAN_100_150",
+        "ABOVE_MEDIAN_150",
+        "UNKNOWN"
+    ],
+    employment_status: Literal[
+        "EMPLOYED",
+        "UNEMPLOYED",
+        "STUDENT",
+        "SELF_EMPLOYED",
+        "UNKNOWN"
+    ],
     has_real_estate: bool,
     has_vehicle: bool
 ) -> dict:
@@ -104,7 +118,11 @@ def collect_asset_profile(
     재산 보유 여부를 수집합니다.
     금액이 아닌 '존재 여부'만 판단합니다.
     """
-    profile = UserProfile(**current_profile)
+    profile = UserProfile(
+        age_group=age_group,
+        income_level=income_level,
+        employment_status=employment_status
+    )
 
     profile.assets = {
         "has_real_estate": has_real_estate,
