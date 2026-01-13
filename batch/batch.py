@@ -1,115 +1,96 @@
 import os
 import psycopg2
-from psycopg2 import sql
-from tenacity import retry, stop_after_attempt, wait_fixed
 import json
-import requests
 import sys
+from tenacity import retry, stop_after_attempt, wait_fixed
 
-# 환경 변수 로드
-JOB_NAME = os.environ.get("JOB_NAME", "welfare_sync_job")
+JOB_NAME = os.environ.get("JOB_NAME", "default_job")
 API_KEY = os.environ["OPENAPI_KEY"]
 
-def get_connection():
-    return psycopg2.connect(
-        host=os.environ["PGHOST"],
-        port=os.environ["PGPORT"],
-        dbname=os.environ["PGDATABASE"],
-        user=os.environ["PGUSER"],
-        password=os.environ["PGPASSWORD"],
-    )
+# 1. 연결 설정
+conn = psycopg2.connect(
+    host=os.environ["PGHOST"],
+    port=os.environ["PGPORT"],
+    dbname=os.environ["PGDATABASE"],
+    user=os.environ["PGUSER"],
+    password=os.environ["PGPASSWORD"],
+)
+conn.autocommit = False
 
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-def fetch_page(page: int):
-    url = "https://api.odcloud.kr/api/gov24/v3/serviceList"
-    params = {
-        "serviceKey": API_KEY,
-        "pageNo": page,
-        "numOfRows": 100,
-        "resultType": "JSON" # API 명세에 따라 필요한 경우 추가
-    }
-    res = requests.get(url, params=params, timeout=15)
-    res.raise_for_status()
-    return res.json()
+# batch_id를 try 밖에서 None으로 초기화 (NameError 방지)
+batch_id = None
 
-def run_batch():
-    conn = get_connection()
-    conn.autocommit = False # 트랜잭션 수동 제어
+try:
+    cur = conn.cursor()
+
+    # 2. Advisory Lock
+    cur.execute("select pg_try_advisory_lock(hashtext(%s))", (JOB_NAME,))
+    if not cur.fetchone()[0]:
+        print("Another batch is running. Exit.")
+        sys.exit(0)
+
+    # 3. 이전 실행 checkpoint 조회
+    cur.execute("""
+        select checkpoint
+        from batch_run
+        where job_name = %s and status = 'FAILED'
+        order by started_at desc
+        limit 1
+    """, (JOB_NAME,))
+    row = cur.fetchone()
+
+    # 중요: psycopg2는 JSONB를 dict로 가져옵니다. 
+    # 따라서 별도의 json.loads()가 필요 없습니다.
+    if row and row[0]:
+        checkpoint = row[0] 
+        # 만약 DB 타입이 JSONB가 아니라 TEXT라면 아래 한 줄이 필요할 수 있습니다.
+        # if isinstance(checkpoint, str): checkpoint = json.loads(checkpoint)
+    else:
+        checkpoint = {"page": 1}
+
+    # 4. batch_run 시작 기록
+    cur.execute("""
+        insert into batch_run(job_name, checkpoint, status)
+        values (%s, %s, 'RUNNING')
+        returning id
+    """, (JOB_NAME, json.dumps(checkpoint)))
+    batch_id = cur.fetchone()[0]
+    conn.commit()
+
+    # 5. 실행 로직 (생략된 부분은 기존과 동일)
+    page = checkpoint.get("page", 1)
     
-    # ... 앞부분 동일 ...
+    # ... (데이터 페치 및 insert 루프) ...
+    # 이 안에서도 cur.execute 시 json.dumps(checkpoint)를 사용하세요.
 
-    batch_id = None  # NameError 방지를 위해 미리 선언
+    # 6. 성공 처리
+    cur.execute("""
+        update batch_run set status='SUCCESS', finished_at=now() where id=%s
+    """, (batch_id,))
+    conn.commit()
 
-    try:
-        with conn.cursor() as cur:
-            # 1. Advisory Lock
-            cur.execute("select pg_try_advisory_lock(hashtext(%s))", (JOB_NAME,))
-            if not cur.fetchone()[0]:
-                print("Another batch is running. Exit.")
-                sys.exit(0)
-        # 2. 이전 실행 checkpoint 조회
-        cur.execute("""
-            select checkpoint from batch_run
-            where job_name = %s and status = 'FAILED'
-            order by started_at desc limit 1
-        """, (JOB_NAME,))
-        row = cur.fetchone()
-
-        # 중요: row[0]가 이미 dict일 수 있고 str일 수도 있음 (DB 드라이버 설정에 따라)
-        if row and row[0]:
-            checkpoint = row[0]
-            if isinstance(checkpoint, str): # 문자열이라면 변환
-                checkpoint = json.loads(checkpoint)
-        else:
-            checkpoint = {"page": 1}
-
-        # 3. batch_run 시작 기록
-        cur.execute("""
-            insert into batch_run(job_name, checkpoint)
-            values (%s, %s)
-            returning id
-        """, (JOB_NAME, json.dumps(checkpoint)))
-        batch_id = cur.fetchone()[0]
-        conn.commit()
-
-        # 4. 데이터 페치 및 저장 루프
-        page = checkpoint.get("page", 1)
-        while True:
-            # ... (중략: 데이터 가져오기 로직) ...
-        
-            # 페이지 저장 후 체크포인트 업데이트
-            page += 1
-            with conn.cursor() as cur:
-                cur.execute("""
-                    update batch_run set checkpoint = %s where id = %s
-                """, (json.dumps({"page": page}), batch_id))
-                conn.commit()
-    except Exception as e:
-        if conn:
-            conn.rollback()
+except Exception as e:
+    print(f"Error occurred: {e}")
+    if conn:
+        conn.rollback()
     
-        # batch_id가 생성된 경우에만 DB에 에러 로그 기록
-        if batch_id is not None:
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("""
-                        update batch_run set status='FAILED', error=%s where id=%s
-                    """, (str(e), batch_id))
-                    conn.commit()
-            except Exception as e2:
-                print(f"Failed to log error to DB: {e2}")
-    
-        print(f"Batch Error: {e}")
-        raise e
-
-    finally:
-        # ... (생략: 연결 종료 로직) ...
-            if conn:
-            # Lock 해제 및 연결 종료
-                with conn.cursor() as final_cur:
-                    final_cur.execute("select pg_advisory_unlock(hashtext(%s))", (JOB_NAME,))
+    # batch_id가 있을 때만(성공적으로 insert 되었을 때만) 에러 로그 업데이트
+    if batch_id is not None:
+        try:
+            with conn.cursor() as err_cur:
+                err_cur.execute("""
+                    update batch_run
+                    set status='FAILED', error=%s, finished_at=now()
+                    where id=%s
+                """, (str(e), batch_id))
             conn.commit()
-            conn.close()
+        except Exception as db_err:
+            print(f"Failed to record error in DB: {db_err}")
+    raise e
 
-if __name__ == "__main__":
-    run_batch()
+finally:
+    if 'cur' in locals() and not cur.closed:
+        cur.execute("select pg_advisory_unlock(hashtext(%s))", (JOB_NAME,))
+        conn.commit()
+        cur.close()
+    conn.close()
