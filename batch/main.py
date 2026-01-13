@@ -5,7 +5,7 @@ import sys
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 JOB_NAME = os.environ.get("JOB_NAME", "default_job")
-API_KEY = os.environ["OPENAPI_KEY"]
+API_KEY = os.environ["welfare_API_KEY"]
 
 # 1. 연결 설정
 conn = psycopg2.connect(
