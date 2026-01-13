@@ -5,6 +5,8 @@ import requests
 import sys
 from tenacity import retry, stop_after_attempt, wait_fixed
 
+import field_mapping
+
 # 1. 환경 변수 및 설정
 JOB_NAME = os.environ.get("JOB_NAME", "welfare_sync_job")
 API_KEY = os.environ["WELFARE_API_KEY"]
@@ -81,19 +83,45 @@ def run_batch():
 
             # 한 페이지의 데이터를 DB에 저장 (Upsert)
             for item in items:
-                cur.execute("""
-                    insert into welfare_service(service_id, service_name, payload)
-                    values (%s, %s, %s::jsonb)
-                    on conflict (service_id)
-                    do update set
-                      service_name = excluded.service_name,
-                      payload = excluded.payload,
-                      updated_at = now()
-                """, (
-                    item.get("서비스ID"), 
-                    item.get("서비스명"), 
-                    json.dumps(item, ensure_ascii=False)
-                ))
+            # 1) 매핑 정보를 바탕으로 데이터 추출
+            row_data = {db_col: item.get(api_key) for api_key, db_col in FIELD_MAPPING.items()}
+            
+            # 2) 쿼리 실행 (추출한 데이터를 각 컬럼에 매핑)
+            cur.execute("""
+                INSERT INTO welfare_service (
+                    service_id, service_name, service_purpose, support_type,
+                    provider_name, apply_org_name, contact_info,
+                    apply_period, apply_method, apply_url,
+                    law_basis, admin_rule, local_rule, 
+                    payload
+                )
+                VALUES (
+                    %(service_id)s, %(service_name)s, %(service_purpose)s, %(support_type)s,
+                    %(provider_name)s, %(apply_org_name)s, %(contact_info)s,
+                    %(apply_period)s, %(apply_method)s, %(apply_url)s,
+                    %(law_basis)s, %(admin_rule)s, %(local_rule)s,
+                    %(payload)s::jsonb
+                )
+                ON CONFLICT (service_id)
+                DO UPDATE SET
+                    service_name = EXCLUDED.service_name,
+                    service_purpose = EXCLUDED.service_purpose,
+                    support_type = EXCLUDED.support_type,
+                    provider_name = EXCLUDED.provider_name,
+                    apply_org_name = EXCLUDED.apply_org_name,
+                    contact_info = EXCLUDED.contact_info,
+                    apply_period = EXCLUDED.apply_period,
+                    apply_method = EXCLUDED.apply_method,
+                    apply_url = EXCLUDED.apply_url,
+                    law_basis = EXCLUDED.law_basis,
+                    admin_rule = EXCLUDED.admin_rule,
+                    local_rule = EXCLUDED.local_rule,
+                    payload = EXCLUDED.payload,
+                    updated_at = NOW()
+            """, {
+                **row_data, 
+                "payload": json.dumps(item, ensure_ascii=False)
+            })
 
             # 체크포인트 업데이트 및 페이지 커밋
             current_page += 1
