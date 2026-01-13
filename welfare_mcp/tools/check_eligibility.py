@@ -1,10 +1,9 @@
 from backend.entity.UserProfile import UserProfile
 from mcp_container import mcp
-from typing import Literal, Dict
-import logging
+from typing import Literal
 
 from backend.entity.EligibilityResult import EligibilityResult
-from welfare_mcp.resources.getOpenAPI import get_welfare_supportConditions, get_welfare_serviceDetail, search_welfare_services
+from resources.getOpenAPI import get_welfare_supportConditions, get_welfare_serviceDetail, search_welfare_services
 
 @mcp.tool(
     name="check_eligibility",

@@ -10,4 +10,4 @@ RUN pip install --no-cache-dir \
 
 COPY . .
 
-CMD ["python", "batch.py"]
+CMD ["python", "main.py"]

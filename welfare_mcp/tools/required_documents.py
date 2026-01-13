@@ -2,7 +2,7 @@ from typing import List
 from backend.entity.UserProfile import UserProfile
 from mcp_container import mcp
 from typing import Literal
-from welfare_mcp.resources.getOpenAPI import get_welfare_serviceDetail, get_welfare_supportConditions, search_welfare_services
+from resources.getOpenAPI import get_welfare_serviceDetail, get_welfare_supportConditions, search_welfare_services
 
 @mcp.tool(
     name="required_documents",
