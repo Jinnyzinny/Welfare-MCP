@@ -14,11 +14,11 @@ API_KEY = os.environ["WELFARE_API_KEY"]
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def fetch_page(page: int):
-    url = "https://api.odcloud.kr/api/gov24/v3/serviceList"
+    url = "https://api.odcloud.kr/api/gov24/v3/serviceDetail"
     params = {
         "serviceKey": API_KEY,
         "pageNo": page,
-        "perPage": 1000,
+        "perPage": 100,
         "resultType": "JSON"
     }
     res = requests.get(url, params=params, timeout=20)
