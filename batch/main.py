@@ -7,7 +7,7 @@ import requests
 
 
 JOB_NAME = os.environ["JOB_NAME"]
-API_KEY = os.environ["OPENAPI_KEY"]
+API_KEY = os.environ["WELFARE_API_KEY"]
 
 conn = psycopg2.connect(
     host=os.environ["PGHOST"],
