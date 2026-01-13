@@ -53,8 +53,8 @@ def fetch_page(page: int):
     url = "https://api.odcloud.kr/api/gov24/v3/serviceList"
     params = {
         "serviceKey": API_KEY,
-        "pageNo": page,
-        "numOfRows": 100
+        "page": page,
+        "perPage":1000,
     }
     res = requests.get(url, params=params, timeout=10)
     res.raise_for_status()
@@ -93,6 +93,9 @@ try:
         """, (json.dumps({"page": page}), batch_id))
 
         conn.commit()
+        # ✅ 끝 판단 (정석)
+        if (page - 1) * 1000 >= total_count:
+            break
 
     # 성공 처리
     cur.execute("""
