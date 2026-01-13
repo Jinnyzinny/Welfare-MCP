@@ -1,4 +1,4 @@
-from mcp_container import mcp, app
+from mcp_container import mcp
 
 from tools.user_profile import collect_basic_profile, collect_household_profile
 from tools.check_eligibility import check_eligibility
