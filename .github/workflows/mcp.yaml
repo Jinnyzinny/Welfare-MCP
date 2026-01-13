@@ -29,7 +29,7 @@ jobs:
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./welfare_mcp
           push: true
           tags: |
             jinnyzinny/welfare-mcp:latest
@@ -58,3 +58,13 @@ jobs:
 
           docker ps
           EOF
+
+      # 7️⃣ Batch 이미지 빌드 & 푸시 (상시 사용하진 않고 수동으로 배치 작업 돌릴 때 사용)
+      - name: Build & Push Batch Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./batch
+          push: true
+          tags: |
+            jinnyzinny/welfare-batch:latest
+            jinnyzinny/welfare-batch:${{ github.sha }}
