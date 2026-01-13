@@ -18,7 +18,7 @@ def fetch_page(page: int):
     params = {
         "serviceKey": API_KEY,
         "pageNo": page,
-        "numOfRows": 100,
+        "perPage": 1000,
         "resultType": "JSON"
     }
     res = requests.get(url, params=params, timeout=20)
