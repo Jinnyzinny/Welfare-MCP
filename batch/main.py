@@ -17,7 +17,7 @@ def fetch_page(page: int):
     url = "https://api.odcloud.kr/api/gov24/v3/serviceDetail"
     params = {
         "serviceKey": API_KEY,
-        "pageNo": page,
+        "page": page,
         "perPage": 100,
         "resultType": "JSON"
     }
