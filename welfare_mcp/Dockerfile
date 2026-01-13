@@ -2,9 +2,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-ENV PYTHONPATH=/mcp_contest
-
-RUN pip install --no-cache-dir mcp uvicorn starlette python-dotenv
+RUN pip install --no-cache-dir \
+    mcp \
+    uvicorn \
+    starlette \
+    python-dotenv \
+    psycopg2-binary
 
 COPY . .
 
