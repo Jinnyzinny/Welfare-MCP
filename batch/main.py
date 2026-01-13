@@ -5,7 +5,7 @@ import requests
 import sys
 from tenacity import retry, stop_after_attempt, wait_fixed
 
-# 매핑 파일에서 가져오기 (field_mapping.py에 정의된 mapping 기준)
+# 매핑 파일에서 가져오기 (이미지 및 필드 정보를 반영한 mapping)
 from field_mapping import FIELD_MAPPING
 
 # 1. 환경 변수 및 설정
@@ -14,12 +14,13 @@ API_KEY = os.environ["WELFARE_API_KEY"]
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def fetch_page(page: int):
+    # 이미지 명세서에 따른 정확한 Endpoint 및 파라미터 설정
     url = "https://api.odcloud.kr/api/gov24/v3/serviceDetail"
     params = {
         "serviceKey": API_KEY,
-        "page": page,
-        "perPage": 100,
-        "resultType": "JSON"
+        "page": page,          # 이미지 확인 결과: pageNo 아님
+        "perPage": 100,        # 페이지당 데이터 수
+        "returnType": "JSON"   # 이미지 확인 결과: resultType 아님
     }
     res = requests.get(url, params=params, timeout=20)
     res.raise_for_status()
@@ -40,13 +41,13 @@ def run_batch():
         conn.autocommit = False
         cur = conn.cursor()
 
-        # Advisory Lock으로 중복 실행 방지
+        # Advisory Lock (중복 실행 방지)
         cur.execute("select pg_try_advisory_lock(hashtext(%s))", (JOB_NAME,))
         if not cur.fetchone()[0]:
             print("Another batch is running. Exit.")
             return
 
-        # 마지막 실패 지점 확인
+        # Checkpoint 확인
         cur.execute("""
             select checkpoint from batch_run 
             where job_name = %s and status = 'FAILED' 
@@ -58,7 +59,6 @@ def run_batch():
         if row and row[0]:
             checkpoint = row[0] if isinstance(row[0], dict) else json.loads(row[0])
 
-        # 배치 실행 기록 생성
         cur.execute("""
             insert into batch_run(job_name, checkpoint, status) 
             values (%s, %s, 'RUNNING') returning id
@@ -78,11 +78,10 @@ def run_batch():
                 break
 
             for item in items:
-                # 1) 매핑 정보를 바탕으로 데이터 추출
-                # FIELD_MAPPING은 { "API필드명": "DB컬럼명" } 구조여야 함
+                # 1) FIELD_MAPPING에 정의된 모든 컬럼 추출
                 row_data = {db_col: (item.get(api_key) or "") for api_key, db_col in FIELD_MAPPING.items()}
             
-                # 2) 쿼리 실행 (정의하신 컬럼 구조에 맞게 수정)
+                # 2) 모든 컬럼 매칭 쿼리 (19개 주요 필드 + payload)
                 cur.execute("""
                     INSERT INTO welfare_service (
                         service_id, support_type, service_name, service_purpose,
@@ -128,17 +127,15 @@ def run_batch():
                 })
 
             current_page += 1
-            cur.execute("""
-                update batch_run set checkpoint = %s where id = %s
-            """, (json.dumps({"page": current_page}), batch_id))
-            
+            cur.execute("update batch_run set checkpoint = %s where id = %s", 
+                       (json.dumps({"page": current_page}), batch_id))
             conn.commit()
-            print(f"Successfully saved page {current_page - 1}")
+            
+            # 페이지 전환 시 로그 출력하여 데이터 변화 감시
+            if items:
+                print(f"Page {current_page - 1} saved. First ID: {items[0].get('서비스ID') or items[0].get('SVC_ID')}")
 
-        # 성공 종료
-        cur.execute("""
-            update batch_run set status='SUCCESS', finished_at=now() where id=%s
-        """, (batch_id,))
+        cur.execute("update batch_run set status='SUCCESS', finished_at=now() where id=%s", (batch_id,))
         conn.commit()
 
     except Exception as e:
@@ -148,12 +145,9 @@ def run_batch():
             if batch_id:
                 try:
                     with conn.cursor() as err_cur:
-                        err_cur.execute("""
-                            update batch_run set status='FAILED', error=%s where id=%s
-                        """, (str(e), batch_id))
+                        err_cur.execute("update batch_run set status='FAILED', error=%s where id=%s", (str(e), batch_id))
                     conn.commit()
-                except:
-                    pass
+                except: pass
         raise e
     finally:
         if conn:
