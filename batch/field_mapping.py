@@ -1,11 +1,21 @@
 FIELD_MAPPING = {
     "서비스ID": "service_id",
-    "서비스명": "service_name",
     "지원유형": "support_type",
-
-    "소관기관명": "provider_name",
+    "서비스명": "service_name",
+    "서비스목적": "service_purpose",
+    "신청기한":"apply_deadline",
+    "지원대상": "support_target",
+    "선정기준": "selection_criteria",
+    "신청방법": "apply_method",
+    "구비서류": "required_documents",
     "접수기관명": "apply_org_name",
     "문의처": "contact_info",
-
-    "신청기한": "apply_deadline",
+    "온라인신청사이트URL": "apply_url",
+    "수정일시": "last_modified_time",
+    "소관기관명": "provider_name",
+    "행정규칙": "admin_rule",
+    "자치법규": "local_rule",
+    "법령": "law_basis",
+    "공무원확인구비서류": "official_required_documents",
+    "본인확인필요구비서류": "personal_verification_required_documents",
 }

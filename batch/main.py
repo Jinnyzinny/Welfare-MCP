@@ -5,7 +5,7 @@ import requests
 import sys
 from tenacity import retry, stop_after_attempt, wait_fixed
 
-# 매핑 파일에서 가져오기
+# 매핑 파일에서 가져오기 (field_mapping.py에 정의된 mapping 기준)
 from field_mapping import FIELD_MAPPING
 
 # 1. 환경 변수 및 설정
@@ -40,11 +40,13 @@ def run_batch():
         conn.autocommit = False
         cur = conn.cursor()
 
+        # Advisory Lock으로 중복 실행 방지
         cur.execute("select pg_try_advisory_lock(hashtext(%s))", (JOB_NAME,))
         if not cur.fetchone()[0]:
             print("Another batch is running. Exit.")
             return
 
+        # 마지막 실패 지점 확인
         cur.execute("""
             select checkpoint from batch_run 
             where job_name = %s and status = 'FAILED' 
@@ -56,6 +58,7 @@ def run_batch():
         if row and row[0]:
             checkpoint = row[0] if isinstance(row[0], dict) else json.loads(row[0])
 
+        # 배치 실행 기록 생성
         cur.execute("""
             insert into batch_run(job_name, checkpoint, status) 
             values (%s, %s, 'RUNNING') returning id
@@ -75,39 +78,48 @@ def run_batch():
                 break
 
             for item in items:
-                # 1) 매핑 정보를 바탕으로 데이터 추출 (None 방지를 위해 or "" 추가)
+                # 1) 매핑 정보를 바탕으로 데이터 추출
+                # FIELD_MAPPING은 { "API필드명": "DB컬럼명" } 구조여야 함
                 row_data = {db_col: (item.get(api_key) or "") for api_key, db_col in FIELD_MAPPING.items()}
             
-                # 2) 쿼리 실행
+                # 2) 쿼리 실행 (정의하신 컬럼 구조에 맞게 수정)
                 cur.execute("""
                     INSERT INTO welfare_service (
-                        service_id, service_name, service_purpose, support_type,
-                        provider_name, apply_org_name, contact_info,
-                        apply_period, apply_method, apply_url,
-                        law_basis, admin_rule, local_rule, 
+                        service_id, support_type, service_name, service_purpose,
+                        apply_deadline, support_target, selection_criteria,
+                        apply_method, required_documents, apply_org_name, contact_info,
+                        apply_url, last_modified_time, provider_name, admin_rule, local_rule,
+                        law_basis, official_required_documents, personal_verification_required_documents,
                         payload
                     )
                     VALUES (
-                        %(service_id)s, %(service_name)s, %(service_purpose)s, %(support_type)s,
-                        %(provider_name)s, %(apply_org_name)s, %(contact_info)s,
-                        %(apply_period)s, %(apply_method)s, %(apply_url)s,
-                        %(law_basis)s, %(admin_rule)s, %(local_rule)s,
+                        %(service_id)s, %(support_type)s, %(service_name)s, %(service_purpose)s,
+                        %(apply_deadline)s, %(support_target)s, %(selection_criteria)s,
+                        %(apply_method)s, %(required_documents)s, %(apply_org_name)s, %(contact_info)s,
+                        %(apply_url)s, %(last_modified_time)s, %(provider_name)s, %(admin_rule)s, %(local_rule)s,
+                        %(law_basis)s, %(official_required_documents)s, %(personal_verification_required_documents)s,
                         %(payload)s::jsonb
                     )
                     ON CONFLICT (service_id)
                     DO UPDATE SET
+                        support_type = EXCLUDED.support_type,
                         service_name = EXCLUDED.service_name,
                         service_purpose = EXCLUDED.service_purpose,
-                        support_type = EXCLUDED.support_type,
-                        provider_name = EXCLUDED.provider_name,
+                        apply_deadline = EXCLUDED.apply_deadline,
+                        support_target = EXCLUDED.support_target,
+                        selection_criteria = EXCLUDED.selection_criteria,
+                        apply_method = EXCLUDED.apply_method,
+                        required_documents = EXCLUDED.required_documents,
                         apply_org_name = EXCLUDED.apply_org_name,
                         contact_info = EXCLUDED.contact_info,
-                        apply_period = EXCLUDED.apply_period,
-                        apply_method = EXCLUDED.apply_method,
                         apply_url = EXCLUDED.apply_url,
-                        law_basis = EXCLUDED.law_basis,
+                        last_modified_time = EXCLUDED.last_modified_time,
+                        provider_name = EXCLUDED.provider_name,
                         admin_rule = EXCLUDED.admin_rule,
                         local_rule = EXCLUDED.local_rule,
+                        law_basis = EXCLUDED.law_basis,
+                        official_required_documents = EXCLUDED.official_required_documents,
+                        personal_verification_required_documents = EXCLUDED.personal_verification_required_documents,
                         payload = EXCLUDED.payload,
                         updated_at = NOW()
                 """, {
@@ -123,6 +135,7 @@ def run_batch():
             conn.commit()
             print(f"Successfully saved page {current_page - 1}")
 
+        # 성공 종료
         cur.execute("""
             update batch_run set status='SUCCESS', finished_at=now() where id=%s
         """, (batch_id,))
