@@ -1,6 +1,6 @@
 import os
 from typing import Dict, Any
-from resources.fetch_gov import fetch_gov24
+from tools.OpenAPI.fetch_gov import fetch_gov24
 from dotenv import load_dotenv
 
 load_dotenv()
