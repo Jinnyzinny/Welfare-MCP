@@ -3,8 +3,9 @@ import json
 import os
 from fetch_page import fetch_page
 
-from parse_target_info import parse_target_info
-from parse_welfare_details import parse_welfare_details
+from parse.parse_target_info import parse_target_info
+from parse.parse_welfare_details import parse_welfare_details
+from parse.parse_region import parse_region
 
 # 매핑 파일에서 가져오기 (이미지 및 필드 정보를 반영한 mapping)
 from field_mapping import FIELD_MAPPING
@@ -70,10 +71,14 @@ def run_batch():
                 # 1) FIELD_MAPPING에 정의된 모든 컬럼 추출
                 row_data = {db_col: (item.get(api_key) or "") for api_key, db_col in FIELD_MAPPING.items()}
             
-                # 2) [추가] 지원 대상 텍스트에서 나이/성별 파싱
+                # 2) [수정] provider_name 기반 지역 추출 (중앙정부 vs 지자체)
+                provider = row_data.get("provider_name", "")
+                sido, sigungu = parse_region(provider) # 분리된 모듈 호출
+
+                # 2) [추가] 지원 대상 텍스트에서 나이/성별 파
                 target_text = row_data.get("support_target", "")
                 min_v, max_v, gen_v = parse_target_info(target_text)
-                sido,sigungu,household_type,min_income,max_income=parse_welfare_details(item)
+                household_type,min_income,max_income=parse_welfare_details(target_text)
                 
                 # 4) row_data 통합 (DB 컬럼명과 일치해야 함)
                 row_data.update({

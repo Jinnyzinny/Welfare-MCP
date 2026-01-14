@@ -23,4 +23,4 @@ def parse_welfare_details(item_data):
     min_income = 0
     max_income = int(income_nums[0]) if income_nums else 999 # % 기준 저장
 
-    return sido, sigungu, household_type, min_income,max_income   
+    return household_type, min_income,max_income   
