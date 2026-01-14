@@ -10,7 +10,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 3. 모델 미리 다운로드
-RUN python -c "from sentence-transformers import SentenceTransformer; SentenceTransformer('jhgan/ko-sroberta-multitask')"
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('jhgan/ko-sroberta-multitask')"
 
 # 4. 나머지 배치 소스 코드 복사
 COPY . .
