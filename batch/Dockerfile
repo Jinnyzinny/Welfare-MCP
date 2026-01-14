@@ -6,7 +6,10 @@ RUN pip install --no-cache-dir \
     requests \
     python-dotenv \
     psycopg2-binary \
-    tenacity
+    tenacity \
+    sentence-transformers \
+    torch \ 
+    numpy
 
 COPY . .
 
