@@ -34,6 +34,9 @@ jobs:
           tags: |
             jinnyzinny/welfare-mcp:latest
             jinnyzinny/welfare-mcp:${{ github.sha }}
+          # 🔥 GHA 캐시 적용
+          cache-from: type=gha,scope=server
+          cache-to: type=gha,mode=max,scope=server
 
       # 5️⃣ SSH 설정
       - name: Set up SSH
