@@ -7,8 +7,8 @@ def parse_welfare_details(item_data):
     # 1. 지역 정보 추출 (시/도, 시/군/구)
     # 예: "서울특별시 강남구" -> sido: 서울특별시, sigungu: 강남구
     region_match = re.search(r'([가-힣]+(?:세종|특별|광역|도|시))\s+([가-힣]+(?:구|시|군))?', text)
-    sido = region_match.group(1) if region_match else "전국"
-    sigungu = region_match.group(2) if region_match and region_match.group(2) else "전체"
+    # sido = region_match.group(1) if region_match else "전국"
+    # sigungu = region_match.group(2) if region_match and region_match.group(2) else "전체"
 
     # 2. 가구 형태 (Household Type)
     # 예: 다자녀, 1인가구, 저소득층 등
