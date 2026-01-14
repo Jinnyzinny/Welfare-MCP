@@ -10,6 +10,8 @@ from parse.parse_region import parse_region
 # 매핑 파일에서 가져오기 (이미지 및 필드 정보를 반영한 mapping)
 from field_mapping import FIELD_MAPPING
 
+from parse.get_embedding import get_embedding
+
 # 1. 환경 변수 및 설정
 JOB_NAME = os.environ.get("JOB_NAME", "welfare_sync_job")
 
@@ -75,6 +77,9 @@ def run_batch():
                 provider = row_data.get("provider_name", "")
                 sido, sigungu = parse_region(provider) # 분리된 모듈 호출
 
+                # 여기서 768차원 리스트가 생성됩니다.
+                embedding_vector = get_embedding(target_text)
+
                 # 2) [추가] 지원 대상 텍스트에서 나이/성별 파
                 target_text = row_data.get("support_target", "")
                 min_v, max_v, gen_v = parse_target_info(target_text)
@@ -82,16 +87,17 @@ def run_batch():
                 
                 # 4) row_data 통합 (DB 컬럼명과 일치해야 함)
                 row_data.update({
-                "min_age": min_v,
-                "max_age": max_v,
-                "gender": gen_v,
-                "sido": sido,
-                "sigungu": sigungu,
-                "household_type": household_type,
-                "min_income": min_income,
-                "max_income": max_income,
-                "payload": json.dumps(item, ensure_ascii=False)
-            })
+                    "min_age": min_v,
+                    "max_age": max_v,
+                    "gender": gen_v,
+                    "sido": sido,
+                    "sigungu": sigungu,
+                    "household_type": household_type,
+                    "min_income": min_income,
+                    "max_income": max_income,
+                    "payload": json.dumps(item, ensure_ascii=False),"embedding": embedding_vector,
+                    "embedding": embedding_vector,
+                })
 
             # 5) INSERT 실행
             cur.execute("""
@@ -125,6 +131,7 @@ def run_batch():
                 max_income = EXCLUDED.max_income,
                 payload = EXCLUDED.payload,
                 updated_at = NOW()
+                embedding = EXCLUDED.embedding,
             """, row_data)
 
             current_page += 1
