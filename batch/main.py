@@ -1,36 +1,21 @@
-import os
 import psycopg2
 import json
-import requests
-import sys
-from tenacity import retry, stop_after_attempt, wait_fixed
+import os
+from fetch_page import fetch_page
+from parse_target_info import parse_target_info
 
 # 매핑 파일에서 가져오기 (이미지 및 필드 정보를 반영한 mapping)
 from field_mapping import FIELD_MAPPING
 
 # 1. 환경 변수 및 설정
 JOB_NAME = os.environ.get("JOB_NAME", "welfare_sync_job")
-API_KEY = os.environ["WELFARE_API_KEY"]
-
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-def fetch_page(page: int):
-    # 이미지 명세서에 따른 정확한 Endpoint 및 파라미터 설정
-    url = "https://api.odcloud.kr/api/gov24/v3/serviceDetail"
-    params = {
-        "serviceKey": API_KEY,
-        "page": page,          # 이미지 확인 결과: pageNo 아님
-        "perPage": 100,        # 페이지당 데이터 수
-        "returnType": "JSON"   # 이미지 확인 결과: resultType 아님
-    }
-    res = requests.get(url, params=params, timeout=20)
-    res.raise_for_status()
-    return res.json()
 
 def run_batch():
     conn = None
     batch_id = None
     
     try:
+        # DB 연결
         conn = psycopg2.connect(
             host=os.environ["PGHOST"],
             port=os.environ["PGPORT"],
@@ -38,7 +23,9 @@ def run_batch():
             user=os.environ["PGUSER"],
             password=os.environ["PGPASSWORD"],
         )
+        # Batch 작업 중에는 자동 커밋 비활성화
         conn.autocommit = False
+        # DB 커서 생성
         cur = conn.cursor()
 
         # Advisory Lock (중복 실행 방지)
@@ -54,7 +41,7 @@ def run_batch():
             order by started_at desc limit 1
         """, (JOB_NAME,))
         row = cur.fetchone()
-        
+
         checkpoint = {"page": 1}
         if row and row[0]:
             checkpoint = row[0] if isinstance(row[0], dict) else json.loads(row[0])
@@ -81,7 +68,19 @@ def run_batch():
                 # 1) FIELD_MAPPING에 정의된 모든 컬럼 추출
                 row_data = {db_col: (item.get(api_key) or "") for api_key, db_col in FIELD_MAPPING.items()}
             
-                # 2) 모든 컬럼 매칭 쿼리 (19개 주요 필드 + payload)
+                # 2) [추가] 지원 대상 텍스트에서 나이/성별 파싱
+                target_text = row_data.get("support_target", "")
+                min_v, max_v, gen_v = parse_target_info(target_text)
+                
+                # row_data 업데이트
+                row_data.update({
+                    "minage": min_v,
+                    "maxage": max_v,
+                    "gender": gen_v,
+                    "payload": json.dumps(item, ensure_ascii=False)
+                })
+        
+                # 3) 모든 컬럼 매칭 쿼리 (19개 주요 필드 + payload)
                 cur.execute("""
                     INSERT INTO welfare_service (
                         service_id, support_type, service_name, service_purpose,
@@ -128,7 +127,7 @@ def run_batch():
 
             current_page += 1
             cur.execute("update batch_run set checkpoint = %s where id = %s", 
-                       (json.dumps({"page": current_page}), batch_id))
+                (json.dumps({"page": current_page}), batch_id))
             conn.commit()
             
             # 페이지 전환 시 로그 출력하여 데이터 변화 감시
