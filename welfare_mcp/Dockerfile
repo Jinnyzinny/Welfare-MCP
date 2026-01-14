@@ -10,7 +10,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 서버 실행 전 모델 캐싱 (권장)
-RUN python -c "from sentence-transformers import SentenceTransformer; SentenceTransformer('jhgan/ko-sroberta-multitask')"
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('jhgan/ko-sroberta-multitask')"
 
 COPY . .
 
