@@ -3,7 +3,14 @@ from mcp_container import mcp
 from typing import Literal
 
 from backend.entity.EligibilityResult import EligibilityResult
-from resources.getOpenAPI import get_welfare_supportConditions, get_welfare_serviceDetail, search_welfare_services
+from tools.OpenAPI.getOpenAPI import get_welfare_supportConditions, get_welfare_serviceDetail, search_welfare_services
+
+from psycopg2 import DatabaseError
+
+from backend.DB_Connection import dbConn
+
+import logging
+logging.basicConfig(level=logging.INFO)
 
 @mcp.tool(
     name="check_eligibility",
@@ -51,50 +58,29 @@ async def check_eligibility(
 
     reasons = []
     missing = []
-
-    service = await get_welfare_serviceDetail()
-    item = service.get("data", [])
-
-    if not item:
-        raise ValueError("서비스 정보 조회 실패")
-
-    service_detail = item[0]
-    service_id = service_detail.get("서비스ID")
-
-    if not service_id:
-        raise ValueError("service_id를 찾을 수 없음")
-
-    support_target = service_detail.get("지원대상")
-    selection_criteria = service_detail.get("선정기준")
-
-    # 1️⃣ 연령 판별 (문자열 기반)
-    if "청년" in support_target:
-        if profile.age_group is None:
-            missing.append("age_group")
-        elif profile.age_group != "YOUTH":
-            reasons.append("청년 대상 서비스입니다.")
-
-    # 2️⃣ 미취업 여부
-    if "미취업" in support_target:
-        if profile.employment_status is None:
-            missing.append("employment_status")
-        elif profile.employment_status != "UNEMPLOYED":
-            reasons.append("미취업자 대상 서비스입니다.")
-
-    # 3️⃣ 소득 기준
-    if "중위소득" in selection_criteria:
-        if profile.income_level is None:
-            missing.append("income_level")
-        elif profile.income_level in ["ABOVE_MEDIAN_150"]:
-            reasons.append("소득 기준을 초과할 가능성이 있습니다.")
-
-    eligible = len(reasons) == 0 and len(missing) == 0
-
-    able_to_get_welfare=EligibilityResult(
-        service_id=service_id,
-        eligible=eligible,
-        reasons=reasons if reasons else ["신청 가능성이 있습니다."],
-        missing_conditions=missing
-    )
     
-    return able_to_get_welfare.model_dump()
+    # DB 연결
+    try:
+        conn = dbConn()
+        # DB 커서 생성
+        cur = conn.cursor()
+    except DatabaseError as e:
+        logging.error(f"DB 연결 실패: {e}")
+        raise
+
+    cur.execute("select * from welfare_service")
+    service=cur.fetchall()
+
+
+
+    # 안 써도 되는 걸 알지만 StereoType처럼 추가 단 SELECT밖에 하지 않았기에 주석 처리
+    # conn.commit()
+    # DB 연결 종료
+    cur.close()
+    
+    return EligibilityResult(
+        is_eligible=False,
+        reasons=reasons,
+        missing_information=missing,
+        user_profile=profile
+    ).model_dump()
