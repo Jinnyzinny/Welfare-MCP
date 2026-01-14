@@ -2,7 +2,9 @@ import psycopg2
 import json
 import os
 from fetch_page import fetch_page
+
 from parse_target_info import parse_target_info
+from parse_welfare_details import parse_welfare_details
 
 # 매핑 파일에서 가져오기 (이미지 및 필드 정보를 반영한 mapping)
 from field_mapping import FIELD_MAPPING
@@ -71,12 +73,19 @@ def run_batch():
                 # 2) [추가] 지원 대상 텍스트에서 나이/성별 파싱
                 target_text = row_data.get("support_target", "")
                 min_v, max_v, gen_v = parse_target_info(target_text)
+                sido,sigungu,household_type,min_income,max_income=parse_welfare_details(item)
                 
                 # row_data 업데이트
                 row_data.update({
-                    "minage": min_v,
-                    "maxage": max_v,
+                    "min_age": min_v,
+                    "max_age": max_v,
                     "gender": gen_v,
+                    "sido": sido,
+                    "sigungu": sigungu,
+                    "household_type": household_type,
+                    "min_income": min_income,
+                    "max_income": max_income,
+                    # 자산은 텍스트 패턴이 너무 다양하므로 우선 기본값 99999999 세팅 후 필요시 정규식 보강
                     "payload": json.dumps(item, ensure_ascii=False)
                 })
         
