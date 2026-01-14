@@ -46,7 +46,17 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.LIGHTSAIL_HOST }} >> ~/.ssh/known_hosts
 
-      # 6️⃣ LightSail 배포
+      # 6️⃣ Batch 이미지 빌드 & 푸시 (상시 사용하진 않고 수동으로 배치 작업 돌릴 때 사용)
+      - name: Build & Push Batch Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./batch
+          push: true
+          tags: |
+            jinnyzinny/welfare-batch:latest
+            jinnyzinny/welfare-batch:${{ github.sha }}
+
+      # 7️⃣ LightSail 배포
       - name: Deploy to LightSail
         run: |
           ssh ${{ secrets.LIGHTSAIL_USER }}@${{ secrets.LIGHTSAIL_HOST }} << 'EOF'
@@ -61,13 +71,3 @@ jobs:
 
           docker ps
           EOF
-
-      # 7️⃣ Batch 이미지 빌드 & 푸시 (상시 사용하진 않고 수동으로 배치 작업 돌릴 때 사용)
-      - name: Build & Push Batch Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./batch
-          push: true
-          tags: |
-            jinnyzinny/welfare-batch:latest
-            jinnyzinny/welfare-batch:${{ github.sha }}
