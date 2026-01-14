@@ -1,9 +1,28 @@
 from mcp_container import mcp
 from mcp.server.fastmcp.prompts import base
 
-@mcp.prompt(name="사용자 프로필 확보")
-async def get_user_profile_prompt() -> str:
+
+@mcp.prompt(name="initial_onboarding")
+def initial_onboarding_prompt():
+    """
+    사용자가 처음 접속했을 때, 맞춤형 복지 추천을 위해 
+    필수 프로필(연령, 거주지, 가구소득, 가구원 수)을 확보하는 프롬프트입니다.
+    """
     return [
-        base.UserMessage(content="사용자의 연령, 거주지, 가족 구성원 수, 소득 수준 등의 프로필 정보를 확보하세요."),
-        base.SystemMessage(content="사용자에게 필요한 정보를 질문하여 프로필을 완성하세요."),
+        {
+            "role": "system",
+            "content": (
+                "당신은 100만 개의 복지 데이터를 관리하는 전문 상담사입니다. "
+                "사용자에게 딱 맞는 혜택을 100만 개 데이터 중에서 필터링하려면 다음 정보가 반드시 필요합니다: "
+                "1. 연령, 2. 거주지(시/군/구), 3. 가구 소득 수준, 4. 가구원 수. "
+                "\n\n[규칙]"
+                "- 한 번에 너무 많은 질문을 하지 말고, 친절하고 부드러운 말투로 대화를 시작하세요."
+                "- 사용자가 정보를 주면, 이를 바탕으로 `search_welfare` 도구를 사용할 준비를 하세요."
+                "- 정보가 수집되기 전에는 구체적인 추천을 하지 마세요."
+            )
+        },
+        {
+            "role": "assistant",
+            "content": "안녕하세요! 님에게 딱 맞는 복지 혜택을 찾아드리고 싶어요. 가장 먼저, 현재 어디(시/도)에 살고 계신지 알려주실 수 있나요?"
+        }
     ]
