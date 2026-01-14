@@ -75,64 +75,52 @@ def run_batch():
                 min_v, max_v, gen_v = parse_target_info(target_text)
                 sido,sigungu,household_type,min_income,max_income=parse_welfare_details(item)
                 
-                # row_data 업데이트
+                # 4) row_data 통합 (DB 컬럼명과 일치해야 함)
                 row_data.update({
-                    "min_age": min_v,
-                    "max_age": max_v,
-                    "gender": gen_v,
-                    "sido": sido,
-                    "sigungu": sigungu,
-                    "household_type": household_type,
-                    "min_income": min_income,
-                    "max_income": max_income,
-                    # 자산은 텍스트 패턴이 너무 다양하므로 우선 기본값 99999999 세팅 후 필요시 정규식 보강
-                    "payload": json.dumps(item, ensure_ascii=False)
-                })
-        
-                # 3) 모든 컬럼 매칭 쿼리 (19개 주요 필드 + payload)
-                cur.execute("""
-                    INSERT INTO welfare_service (
-                        service_id, support_type, service_name, service_purpose,
-                        apply_deadline, support_target, selection_criteria,
-                        apply_method, required_documents, apply_org_name, contact_info,
-                        apply_url, last_modified_time, provider_name, admin_rule, local_rule,
-                        law_basis, official_required_documents, personal_verification_required_documents,
-                        payload
-                    )
-                    VALUES (
-                        %(service_id)s, %(support_type)s, %(service_name)s, %(service_purpose)s,
-                        %(apply_deadline)s, %(support_target)s, %(selection_criteria)s,
-                        %(apply_method)s, %(required_documents)s, %(apply_org_name)s, %(contact_info)s,
-                        %(apply_url)s, %(last_modified_time)s, %(provider_name)s, %(admin_rule)s, %(local_rule)s,
-                        %(law_basis)s, %(official_required_documents)s, %(personal_verification_required_documents)s,
-                        %(payload)s::jsonb
-                    )
-                    ON CONFLICT (service_id)
-                    DO UPDATE SET
-                        support_type = EXCLUDED.support_type,
-                        service_name = EXCLUDED.service_name,
-                        service_purpose = EXCLUDED.service_purpose,
-                        apply_deadline = EXCLUDED.apply_deadline,
-                        support_target = EXCLUDED.support_target,
-                        selection_criteria = EXCLUDED.selection_criteria,
-                        apply_method = EXCLUDED.apply_method,
-                        required_documents = EXCLUDED.required_documents,
-                        apply_org_name = EXCLUDED.apply_org_name,
-                        contact_info = EXCLUDED.contact_info,
-                        apply_url = EXCLUDED.apply_url,
-                        last_modified_time = EXCLUDED.last_modified_time,
-                        provider_name = EXCLUDED.provider_name,
-                        admin_rule = EXCLUDED.admin_rule,
-                        local_rule = EXCLUDED.local_rule,
-                        law_basis = EXCLUDED.law_basis,
-                        official_required_documents = EXCLUDED.official_required_documents,
-                        personal_verification_required_documents = EXCLUDED.personal_verification_required_documents,
-                        payload = EXCLUDED.payload,
-                        updated_at = NOW()
-                """, {
-                    **row_data, 
-                    "payload": json.dumps(item, ensure_ascii=False)
-                })
+                "min_age": min_v,
+                "max_age": max_v,
+                "gender": gen_v,
+                "sido": sido,
+                "sigungu": sigungu,
+                "household_type": household_type,
+                "min_income": min_income,
+                "max_income": max_income,
+                "payload": json.dumps(item, ensure_ascii=False)
+            })
+
+            # 5) INSERT 실행
+            cur.execute("""
+                INSERT INTO welfare_service (
+                service_id, support_type, service_name, service_purpose,
+                apply_deadline, support_target, selection_criteria,
+                apply_method, required_documents, apply_org_name, contact_info,
+                apply_url, last_modified_time, provider_name, admin_rule, local_rule,
+                law_basis, official_required_documents, personal_verification_required_documents,
+                min_age, max_age, gender, sido, sigungu, household_type, 
+                min_income, max_income, payload
+            )
+            VALUES (
+                %(service_id)s, %(support_type)s, %(service_name)s, %(service_purpose)s,
+                %(apply_deadline)s, %(support_target)s, %(selection_criteria)s,
+                %(apply_method)s, %(required_documents)s, %(apply_org_name)s, %(contact_info)s,
+                %(apply_url)s, %(last_modified_time)s, %(provider_name)s, %(admin_rule)s, %(local_rule)s,
+                %(law_basis)s, %(official_required_documents)s, %(personal_verification_required_documents)s,
+                %(min_age)s, %(max_age)s, %(gender)s, %(sido)s, %(sigungu)s, %(household_type)s,
+                %(min_income)s, %(max_income)s, %(payload)s::jsonb
+            )
+            ON CONFLICT (service_id)
+            DO UPDATE SET
+                min_age = EXCLUDED.min_age,
+                max_age = EXCLUDED.max_age,
+                gender = EXCLUDED.gender,
+                sido = EXCLUDED.sido,
+                sigungu = EXCLUDED.sigungu,
+                household_type = EXCLUDED.household_type,
+                min_income = EXCLUDED.min_income,
+                max_income = EXCLUDED.max_income,
+                payload = EXCLUDED.payload,
+                updated_at = NOW()
+            """, row_data)
 
             current_page += 1
             cur.execute("update batch_run set checkpoint = %s where id = %s", 
