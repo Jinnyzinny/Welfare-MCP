@@ -77,13 +77,13 @@ def run_batch():
                 provider = row_data.get("provider_name", "")
                 sido, sigungu = parse_region(provider) # 분리된 모듈 호출
 
-                # 여기서 768차원 리스트가 생성됩니다.
-                embedding_vector = get_embedding(target_text)
-
                 # 2) [추가] 지원 대상 텍스트에서 나이/성별 파
                 target_text = row_data.get("support_target", "")
                 min_v, max_v, gen_v = parse_target_info(target_text)
                 household_type,min_income,max_income=parse_welfare_details(target_text)
+
+                # 여기서 768차원 리스트가 생성됩니다.
+                embedding_vector = get_embedding(target_text)
                 
                 # 4) row_data 통합 (DB 컬럼명과 일치해야 함)
                 row_data.update({

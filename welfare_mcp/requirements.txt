@@ -1,0 +1,5 @@
+mcp 
+uvicorn 
+starlette 
+python-dotenv 
+psycopg2-binary
