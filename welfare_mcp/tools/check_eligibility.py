@@ -9,78 +9,93 @@ from psycopg2 import DatabaseError
 
 from backend.DB_Connection import dbConn
 
+from psycopg2.extras import RealDictCursor
+
 import logging
 logging.basicConfig(level=logging.INFO)
-
 @mcp.tool(
     name="check_eligibility",
-    description="사용자 프로필과 서비스의 지원대상/선정기준을 비교하여 신청 가능성을 판단합니다."
+    description="사용자의 정확한 나이(숫자)와 가구 형태 등을 기반으로 신청 가능한 복지 서비스를 검색합니다."
 )
 async def check_eligibility(
-        # 연령대를 3가지로 구분
-    age_group: Literal["YOUTH", "ADULT", "SENIOR"] = None,
+    # [핵심] DB 비교를 위해 정확한 숫자 나이를 입력받음
+    age: int,
 
-    # 소득 수준을 5단계로 구분
-    income_level: Literal[
-            "BELOW_MEDIAN_50",
-            "MEDIAN_50_100",
-            "MEDIAN_100_150",
-            "ABOVE_MEDIAN_150",
-            "UNKNOWN"
-    ] = None,
-    # 고용 상태를 5가지로 분류
-    employment_status: Literal[
-            "EMPLOYED",
-            "UNEMPLOYED",
-            "STUDENT",
-            "SELF_EMPLOYED",
-            "UNKNOWN"
-    ] = None,
-    # 가구 형태를 5가지로 구분
+    # 가구 형태 (Enum -> 내부에서 한글 키워드로 변환)
     household_type: Literal[
             "SINGLE",
             "PARENT_CHILD",
             "COUPLE",
             "SINGLE_PARENT",
             "OTHER"
-    ] = None
+    ] = None,
+
+    # 참고용 (DB 검색 조건에는 안 쓰이지만 프로필 생성용)
+    income_level: Literal["BELOW_MEDIAN_50", "MEDIAN_50_100", "MEDIAN_100_150", "ABOVE_MEDIAN_150", "UNKNOWN"] = "UNKNOWN",
+    employment_status: Literal["EMPLOYED", "UNEMPLOYED", "STUDENT", "SELF_EMPLOYED", "UNKNOWN"] = "UNKNOWN"
 ) -> dict:
     """
-    서비스의 자연어 조건을 UserProfile과 비교하여
-    신청 가능 여부 및 사유를 반환합니다.
+    사용자의 나이와 가구 형태를 DB 조건과 비교하여
+    신청 가능한 서비스 목록(Service ID 포함)을 반환합니다.
     """
-    profile = UserProfile(
-        age_group=age_group,
-        income_level=income_level,
-        employment_status=employment_status,
-        household_type=household_type
-    )
-
-    reasons = []
-    missing = []
     
-    # DB 연결
+    # 1. 가구 형태 매핑 (Enum -> DB 검색용 한글 키워드)
+    household_map = {
+        "SINGLE": "1인",
+        "SINGLE_PARENT": "한부모",
+        "COUPLE": "부부",
+        "PARENT_CHILD": "다자녀",
+        "OTHER": ""
+    }
+    keyword = household_map.get(household_type, "")
+    
+    eligible_services = []
+
+    conn = None
     try:
         conn = dbConn()
-        # DB 커서 생성
-        cur = conn.cursor()
-    except DatabaseError as e:
-        logging.error(f"DB 연결 실패: {e}")
-        raise
+        cur = conn.cursor(cursor_factory=RealDictCursor)
 
-    cur.execute("select * from welfare_service")
-    service=cur.fetchall()
+        # 2. SQL 쿼리 (나이 범위 & 가구 형태 검색)
+        query = """
+            SELECT 
+                service_id, 
+                service_name, 
+                service_purpose, 
+                support_target,
+                apply_url,
+                min_age,
+                max_age
+            FROM welfare_service
+            WHERE 
+                (min_age IS NULL OR min_age <= %s) 
+                AND (max_age IS NULL OR max_age >= %s)
+                AND (household_type IS NULL OR household_type LIKE %s)
+            LIMIT 5;
+        """
+        
+        db_household_pattern = f"%{keyword}%" if keyword else "%"
+        
+        cur.execute(query, (age, age, db_household_pattern))
+        rows = cur.fetchall()
 
+        for row in rows:
+            eligible_services.append({
+                "service_id": row['service_id'], # [중요] 이 ID가 다음 툴의 인풋이 됩니다.
+                "name": row['service_name'],
+                "purpose": row['service_purpose'],
+                "target_text": row['support_target'],
+                "url": row['apply_url']
+            })
 
+    except Exception as e:
+        logging.error(f"DB Query Error: {e}")
+        return {"error": str(e)}
+    finally:
+        if conn:
+            conn.close()
 
-    # 안 써도 되는 걸 알지만 StereoType처럼 추가 단 SELECT밖에 하지 않았기에 주석 처리
-    # conn.commit()
-    # DB 연결 종료
-    cur.close()
-    
-    return EligibilityResult(
-        is_eligible=False,
-        reasons=reasons,
-        missing_information=missing,
-        user_profile=profile
-    ).model_dump()
+    return {
+        "count": len(eligible_services),
+        "recommended_services": eligible_services
+    }
