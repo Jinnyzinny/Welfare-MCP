@@ -133,9 +133,9 @@ async def required_documents(
 # -------------------------------------------------
 # 안전한 종료 처리 (atexit 대신 MCP 공식 지원 방법 권장)
 # -------------------------------------------------
-@mcp.on_shutdown
-async def on_shutdown():
-    global db_pool
-    if db_pool:
-        await db_pool.close()
-        logger.info("👋 DB Pool closed.")
+# @mcp.on_shutdown
+# async def on_shutdown():
+#     global db_pool
+#     if db_pool:
+#         await db_pool.close()
+#         logger.info("👋 DB Pool closed.")
