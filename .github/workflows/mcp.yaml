@@ -68,10 +68,7 @@ jobs:
           docker system prune -f
 
           docker-compose pull server
-          docker-compose up -d server
-
-          # 🔥 핵심: nginx만 재시작
-          docker-compose restart nginx
+          docker-compose up -d server nginx
 
           docker ps
           EOF
