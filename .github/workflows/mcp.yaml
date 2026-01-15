@@ -61,14 +61,16 @@ jobs:
       # 7️⃣ LightSail 배포
       - name: Deploy to LightSail
         run: |
-          ssh ${{ secrets.LIGHTSAIL_USER }}@${{ secrets.LIGHTSAIL_HOST }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no ${{ secrets.LIGHTSAIL_USER }}@${{ secrets.LIGHTSAIL_HOST }} << 'EOF'
           set -e
           cd /home/ubuntu/app
 
-          docker system prune -f
+          sudo docker-compose down || true
 
-          docker-compose pull server nginx postgres
-          docker-compose up -d 
+          sudo docker system prune -f
 
-          docker ps
+          sudo docker-compose pull server nginx postgres
+          sudo docker-compose up -d 
+
+          sudo docker ps
           EOF
