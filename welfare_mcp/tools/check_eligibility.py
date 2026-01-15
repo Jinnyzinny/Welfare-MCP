@@ -5,20 +5,19 @@ from typing import Literal, List, Dict, Any
 
 import asyncpg
 from mcp_container import mcp
-# [수정] 필요한 라이브러리 추가
 from sentence_transformers import SentenceTransformer
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# [수정] 모델을 전역에서 한 번만 로드 (함수 밖으로 빼야 함)
-logger.info("📡 Loading Embedding Model...")
+# 1. 모델을 전역에서 한 번만 로드 (메모리 효율 및 속도)
+logger.info("📡 Loading Embedding Model (jhgan/ko-sroberta-multitask)...")
 model = SentenceTransformer('jhgan/ko-sroberta-multitask')
 logger.info("✅ Model loaded successfully.")
 
 # -------------------------------------------------
-# DB Pool 전역 관리 및 초기화 락
+# DB Pool 전역 관리
 # -------------------------------------------------
 db_pool: asyncpg.Pool | None = None
 _init_lock = asyncio.Lock()
@@ -57,7 +56,7 @@ async def init_db_pool():
 # -------------------------------------------------
 @mcp.tool(
     name="check_eligibility",
-    description="사용자의 질문 내용과 나이, 가구 형태를 기반으로 적합한 복지 서비스를 검색합니다."
+    description="사용자의 질문과 나이, 가구 형태를 기반으로 적합한 복지 서비스를 검색합니다."
 )
 async def check_eligibility(
     query_text: str, 
@@ -79,11 +78,9 @@ async def check_eligibility(
     pattern = f"%{keyword}%" if keyword else "%"
 
     try:
-        # [핵심] 텍스트 임베딩 변환
-        # asyncpg는 리스트 형태의 벡터를 지원하므로 .tolist() 필수
-        query_embedding = model.encode(query_text).tolist()
+        # [핵심] 리스트를 문자열로 변환하여 pgvector 타입 에러 해결
+        query_embedding = str(model.encode(query_text).tolist())
 
-        # 쿼리 실행
         query = """
             SELECT 
                 service_id, 
@@ -94,13 +91,12 @@ async def check_eligibility(
                 1 - (embedding <=> $1) AS similarity
             FROM welfare_service
             WHERE (min_age <= $2 AND max_age >= $2)
-              AND (household_type IS NULL OR household_type ILIKE $3)
+            AND (household_type IS NULL OR household_type ILIKE $3)
             ORDER BY embedding <=> $1
             LIMIT 5;
         """
 
         async with db_pool.acquire() as conn:
-            # $1: embedding, $2: age, $3: pattern
             rows = await conn.fetch(query, query_embedding, age, pattern)
             
         services = [
@@ -109,7 +105,7 @@ async def check_eligibility(
                 "name": r["service_name"],
                 "purpose": r["service_purpose"],
                 "url": r["apply_url"] if r["apply_url"] else "",
-                "similarity": round(float(r["similarity"]), 4) # 유사도 확인용
+                "similarity": round(float(r["similarity"]), 4)
             } for r in rows
         ]
         
@@ -118,6 +114,5 @@ async def check_eligibility(
             "recommended_services": services
         }
     except Exception as e:
-        # [수정] 에러 로그를 아주 상세하게 출력하도록 변경 (원인 파악용)
         logger.error(f"❌ DB Query Error: {str(e)}", exc_info=True)
-        return {"error": f"조회 중 오류가 발생했습니다: {str(e)}"}
+        return {"error": f"조회 중 오류 발생: {str(e)}"}
