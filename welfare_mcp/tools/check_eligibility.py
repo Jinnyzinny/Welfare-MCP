@@ -84,21 +84,21 @@ async def check_eligibility(
 
         # 3. SQL 쿼리 (인덱스 효율을 위해 LIKE 대신 = 혹은 최적화 고려)
         # 나이 조건과 가구 형태 조건을 필터링합니다.
+        # 수정된 SQL 쿼리: 청년층에게 더 적합한 결과가 먼저 나오도록 정렬 추가
         query = """
             SELECT 
-                service_id, 
-                service_name, 
-                service_purpose, 
-                support_target,
-                apply_url,
-                min_age,
-                max_age
+                service_id, service_name, service_purpose, support_target
             FROM welfare_service
             WHERE 
-                (min_age IS NULL OR min_age <= %s) 
-                AND (max_age IS NULL OR max_age >= %s)
+                (min_age <= %s AND max_age >= %s) -- 나이 구간에 정확히 일치하는 것을 우선
                 AND (household_type IS NULL OR household_type LIKE %s)
-            ORDER BY service_id DESC
+            ORDER BY 
+                CASE 
+                    WHEN service_name LIKE '%%청년%%' THEN 1  -- '청년' 들어간 서비스 1순위
+                    WHEN service_name LIKE '%%취업%%' THEN 2  -- '취업' 들어간 서비스 2순위
+                    ELSE 3 
+                END,
+                service_id DESC
             LIMIT 5;
         """
         
