@@ -1,15 +1,14 @@
 import contextlib
-
-# mcp_container.py
+import logging
+import importlib
 from mcp.server.fastmcp import FastMCP
-
 from starlette.applications import Starlette
-from starlette.routing import Mount,Host
+from starlette.routing import Mount
 from starlette.middleware.cors import CORSMiddleware
 
-from starlette.middleware.trustedhost import TrustedHostMiddleware
+logger = logging.getLogger(__name__)
 
-# Create an MCP server
+# MCP 서버 설정
 mcp = FastMCP(
     name="Welfare MCP Server",
     stateless_http=True,
@@ -19,33 +18,33 @@ mcp = FastMCP(
 
 mcp_http_app = mcp.streamable_http_app()
 
-# Create a combined lifespan to manage both session managers
-# lifespan: 세션 매니저 필수
 @contextlib.asynccontextmanager
 async def lifespan(app: Starlette):
+    # [시작] MCP 세션 실행
     async with mcp.session_manager.run():
         yield
+        # [종료] 서버가 꺼질 때 실행 (메모리 해제 핵심)
+        try:
+            # db_pool이 정의된 파일명을 여기에 적으세요 (예: tools.check_eligibility)
+            # 파일 경로에 맞춰 수정이 필요할 수 있습니다.
+            import tools.check_eligibility as db_mod 
+            if hasattr(db_mod, 'db_pool') and db_mod.db_pool:
+                logging.info("🔻 Closing DB Pool safely...")
+                await db_mod.db_pool.close()
+                logging.info("✅ DB Pool closed.")
+        except Exception as e:
+            logging.error(f"❌ Error during DB Pool shutdown: {e}")
 
-
-base_app=Starlette(
-    routes=[
-        Mount("/", mcp_http_app),
-    ],
+base_app = Starlette(
+    routes=[Mount("/", mcp_http_app)],
     lifespan=lifespan,
 )
 
-# base_app 정의 아래에 추가하여 실제 등록된 경로 확인
-for route in base_app.routes:
-    print(f"Route: {route.path}")
-    if hasattr(route, 'app') and hasattr(route.app, 'routes'):
-        for sub_route in route.app.routes:
-            print(f"  -> Sub-Route: {sub_route.path}")
-
-# Then wrap it with CORS middleware
+# 미들웨어 설정
 app = CORSMiddleware(
     base_app,
-    allow_origins=["*"],  # Configure appropriately for production
-    allow_headers=["*"],  # Allow all headers
-    allow_methods=["GET", "POST", "DELETE"],  # MCP streamable HTTP methods
+    allow_origins=["*"],
+    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE"],
     expose_headers=["Mcp-Session-Id"],
 )

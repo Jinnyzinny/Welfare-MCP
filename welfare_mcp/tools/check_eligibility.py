@@ -111,9 +111,9 @@ async def check_eligibility(
         logger.error(f"❌ DB Query Error: {e}")
         return {"error": "데이터 조회 중 오류가 발생했습니다."}
 
-@mcp.on_shutdown
-async def shutdown():
-    global db_pool
-    if db_pool:
-        await db_pool.close()
-        logger.info("👋 Database Pool closed.")
+# @mcp.
+# async def shutdown():
+#     global db_pool
+#     if db_pool:
+#         await db_pool.close()
+#         logger.info("👋 Database Pool closed.")
