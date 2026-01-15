@@ -8,6 +8,12 @@ import asyncpg
 from mcp_container import mcp
 from sentence_transformers import SentenceTransformer
 
+import os
+import torch
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+torch.set_num_threads(1)
+
 # -------------------------------------------------
 # 1. 설정 및 모델 로드
 # -------------------------------------------------
