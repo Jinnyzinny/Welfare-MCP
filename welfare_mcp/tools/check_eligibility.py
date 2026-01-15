@@ -47,7 +47,7 @@ async def init_db_pool():
             raise 
 
 # -------------------------------------------------
-# 3. 키워드 추출 (핵심 의도 파악용)
+# 3. 키워드 추출
 # -------------------------------------------------
 def extract_intent_keywords(query: str) -> List[str]:
     intent_map = {
@@ -80,7 +80,7 @@ def extract_intent_keywords(query: str) -> List[str]:
     return list(set(found_keywords))
 
 # -------------------------------------------------
-# 4. MCP Tool: check_eligibility (Broad Search & Ranking)
+# 4. MCP Tool: check_eligibility
 # -------------------------------------------------
 @mcp.tool(
     name="check_eligibility",
@@ -103,52 +103,50 @@ async def check_eligibility(
     query_embedding = str(model.encode(cleaned_query).tolist())
     target_keywords = extract_intent_keywords(query_text)
 
-    # 2. 지역명 전처리 (유연한 매칭용)
+    # 2. 지역명 전처리
     sido_pattern = f"%{sido[:2]}%" if sido and len(sido) >= 2 else "%"
 
     try:
-        # [핵심 전략 변경] WHERE 절은 최소화, ORDER BY에 로직 집중
+        # [핵심 수정] 서브쿼리(Subquery) 구조로 변경
+        # 안쪽(FROM 절 내부)에서 계산된 별명(Alias)들을 바깥쪽(Main Query)에서 안전하게 사용합니다.
         query = """
-            SELECT 
-                service_id, 
-                service_name, 
-                service_purpose, 
-                apply_url,
-                
-                -- [점수 1] 벡터 유사도 (기본 점수)
-                (1 - (embedding <=> $1))::float AS vector_score,
-                
-                -- [점수 2] 의도(Intent) 매칭 보너스 (가장 중요, +0.5점)
-                -- 사용자가 '취업'을 물어봤는데 서비스명에 '취업'이 있으면 강력 추천
-                (CASE 
-                    WHEN service_name LIKE ANY($5::text[]) OR service_purpose LIKE ANY($5::text[]) THEN 0.5 
-                    ELSE 0 
-                END)::float AS intent_bonus,
-
-                -- [점수 3] 프로필(Profile) 매칭 보너스 (보조 점수, +0.1~0.2점)
-                -- 지역이나 성별이 안 맞아도 검색은 되지만, 맞으면 상단으로 올림
-                (
+            SELECT * FROM (
+                SELECT 
+                    service_id, 
+                    service_name, 
+                    service_purpose, 
+                    apply_url,
+                    
+                    -- [점수 1] 벡터 유사도 계산
+                    (1 - (embedding <=> $1))::float AS vector_score,
+                    
+                    -- [점수 2] 의도(Intent) 매칭 보너스
                     (CASE 
-                        WHEN sido IS NULL OR sido = '' THEN 0.1    -- 전국 서비스는 기본 점수
-                        WHEN sido ILIKE $3 THEN 0.2                -- 내 지역이면 가산점
-                        ELSE 0                                     -- 다른 지역이면 0점 (제외는 안 함)
-                    END) +
-                    (CASE 
-                        WHEN gender IS NULL OR gender = 'ALL' THEN 0.05
-                        WHEN gender = $4 THEN 0.1 
+                        WHEN service_name LIKE ANY($5::text[]) OR service_purpose LIKE ANY($5::text[]) THEN 0.5 
                         ELSE 0 
-                    END)
-                )::float AS profile_bonus
-                 
-            FROM welfare_service
-            WHERE 
-                -- [최소한의 안전장치] 나이는 법적 제한이므로 유지하되, 데이터가 없으면(NULL) 허용
-                (COALESCE(min_age, 0) <= $2 AND (max_age IS NULL OR max_age = 0 OR max_age >= $2))
-                
-                -- [지역/성별 하드 필터 삭제]
-                -- 28세 남성이 '여성 전용'이나 '부산' 공고를 볼 수도 있게 함 (단, 순위는 낮아짐)
+                    END)::float AS intent_bonus,
 
-            -- [최종 정렬] 의도 > 벡터 > 프로필 순으로 영향력을 미침
+                    -- [점수 3] 프로필(Profile) 매칭 보너스
+                    (
+                        (CASE 
+                            WHEN sido IS NULL OR sido = '' THEN 0.1   -- 전국 대상
+                            WHEN sido ILIKE $3 THEN 0.2               -- 내 지역 일치
+                            ELSE 0 
+                        END) +
+                        (CASE 
+                            WHEN gender IS NULL OR gender = 'ALL' THEN 0.05 -- 성별 무관
+                            WHEN gender = $4 THEN 0.1                       -- 성별 일치
+                            ELSE 0 
+                        END)
+                    )::float AS profile_bonus
+                    
+                FROM welfare_service
+                WHERE 
+                    -- 최소한의 자격 요건 (나이)
+                    (COALESCE(min_age, 0) <= $2 AND (max_age IS NULL OR max_age = 0 OR max_age >= $2))
+            ) AS sub_query
+            
+            -- [정렬] 이제 'vector_score'가 진짜 컬럼처럼 인식됩니다.
             ORDER BY (vector_score + intent_bonus + profile_bonus) DESC
             LIMIT 5;
         """
@@ -162,7 +160,7 @@ async def check_eligibility(
                 "name": r["service_name"],
                 "purpose": r["service_purpose"],
                 "url": r["apply_url"] if r["apply_url"] else "",
-                # 점수 디버깅용: 어느 요소 때문에 추천되었는지 확인 가능
+                # 디버깅: 점수 구성 확인
                 "score_breakdown": {
                     "vector": round(r["vector_score"], 2),
                     "intent": round(r["intent_bonus"], 2),
@@ -174,7 +172,7 @@ async def check_eligibility(
         
         return {
             "count": len(services),
-            "strategy": "Broad Intent Search",
+            "search_strategy": "Broad Intent Search (Error Fixed)",
             "recommended_services": services
         }
         
