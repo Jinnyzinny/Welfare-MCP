@@ -1,36 +1,58 @@
-from backend.entity.UserProfile import UserProfile
-from mcp_container import mcp
+import logging
+import os
 from typing import Literal
 
-from backend.entity.EligibilityResult import EligibilityResult
-from tools.OpenAPI.getOpenAPI import get_welfare_supportConditions, get_welfare_serviceDetail, search_welfare_services
-
-from psycopg2 import DatabaseError
-
-from backend.DB_Connection import dbConn
-
+import psycopg2
 from psycopg2.extras import RealDictCursor
+from psycopg2.pool import ThreadedConnectionPool
 
-import logging
+from backend.entity.UserProfile import UserProfile
+from backend.entity.EligibilityResult import EligibilityResult
+from mcp_container import mcp
+from tools.OpenAPI.getOpenAPI import (
+    get_welfare_supportConditions, 
+    get_welfare_serviceDetail, 
+    search_welfare_services
+)
+
+# 로깅 설정
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# ----------------------------------------------------------------
+# 1. DB 커넥션 풀 설정 (서버 시작 시 한 번만 생성)
+# ----------------------------------------------------------------
+# 최소 1개, 최대 10개의 연결을 유지합니다. 
+# dbConn() 내부 설정을 가져오거나 환경 변수를 사용하세요.
+try:
+    # 기존 dbConn에서 정보를 가져오거나 직접 입력 (예시)
+    db_pool = ThreadedConnectionPool(
+        minconn=1,
+        maxconn=10,
+        host=os.getenv("DB_HOST", "localhost"),
+        database=os.getenv("DB_NAME", "your_db"),
+        user=os.getenv("DB_USER", "your_user"),
+        password=os.getenv("DB_PASSWORD", "your_password"),
+        port=os.getenv("DB_PORT", "5432")
+    )
+    logger.info("Database Connection Pool created successfully.")
+except Exception as e:
+    logger.error(f"Failed to create Database Pool: {e}")
+    db_pool = None
+
 @mcp.tool(
     name="check_eligibility",
     description="사용자의 정확한 나이(숫자)와 가구 형태 등을 기반으로 신청 가능한 복지 서비스를 검색합니다."
 )
 async def check_eligibility(
-    # [핵심] DB 비교를 위해 정확한 숫자 나이를 입력받음
     age: int,
-
-    # 가구 형태 (Enum -> 내부에서 한글 키워드로 변환)
     household_type: Literal[
-            "SINGLE",
-            "PARENT_CHILD",
-            "COUPLE",
-            "SINGLE_PARENT",
-            "OTHER"
+        "SINGLE",
+        "PARENT_CHILD",
+        "COUPLE",
+        "SINGLE_PARENT",
+        "OTHER"
     ] = None,
-
-    # 참고용 (DB 검색 조건에는 안 쓰이지만 프로필 생성용)
     income_level: Literal["BELOW_MEDIAN_50", "MEDIAN_50_100", "MEDIAN_100_150", "ABOVE_MEDIAN_150", "UNKNOWN"] = "UNKNOWN",
     employment_status: Literal["EMPLOYED", "UNEMPLOYED", "STUDENT", "SELF_EMPLOYED", "UNKNOWN"] = "UNKNOWN"
 ) -> dict:
@@ -48,15 +70,19 @@ async def check_eligibility(
         "OTHER": ""
     }
     keyword = household_map.get(household_type, "")
-    
     eligible_services = []
 
     conn = None
+    if not db_pool:
+        return {"error": "Database connection pool is not initialized."}
+
     try:
-        conn = dbConn()
+        # 2. 풀에서 커넥션 획득 (새로 연결하지 않아 빠름)
+        conn = db_pool.getconn()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        # 2. SQL 쿼리 (나이 범위 & 가구 형태 검색)
+        # 3. SQL 쿼리 (인덱스 효율을 위해 LIKE 대신 = 혹은 최적화 고려)
+        # 나이 조건과 가구 형태 조건을 필터링합니다.
         query = """
             SELECT 
                 service_id, 
@@ -71,6 +97,7 @@ async def check_eligibility(
                 (min_age IS NULL OR min_age <= %s) 
                 AND (max_age IS NULL OR max_age >= %s)
                 AND (household_type IS NULL OR household_type LIKE %s)
+            ORDER BY service_id DESC
             LIMIT 5;
         """
         
@@ -81,19 +108,23 @@ async def check_eligibility(
 
         for row in rows:
             eligible_services.append({
-                "service_id": row['service_id'], # [중요] 이 ID가 다음 툴의 인풋이 됩니다.
+                "service_id": row['service_id'],
                 "name": row['service_name'],
                 "purpose": row['service_purpose'],
                 "target_text": row['support_target'],
                 "url": row['apply_url']
             })
 
+        cur.close()
+
     except Exception as e:
-        logging.error(f"DB Query Error: {e}")
-        return {"error": str(e)}
+        logger.error(f"DB Query Error: {e}")
+        return {"error": "데이터 조회 중 오류가 발생했습니다."}
+    
     finally:
+        # 4. 커넥션 반납 (종료하지 않고 풀로 되돌림)
         if conn:
-            conn.close()
+            db_pool.putconn(conn)
 
     return {
         "count": len(eligible_services),
