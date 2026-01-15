@@ -65,6 +65,8 @@ jobs:
           set -e
           cd /home/ubuntu/app
 
+          docker system prune -f
+
           docker-compose pull server
           docker-compose up -d server
 

@@ -12,7 +12,7 @@ from parse.get_embedding import get_embedding
 from field_mapping import FIELD_MAPPING
 
 # DB 연결
-from welfare_mcp.backend.DB_Connection import dbConn
+from DB_Connection import dbConn
 
 from sentence_transformers import SentenceTransformer
 
