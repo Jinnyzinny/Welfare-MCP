@@ -42,7 +42,7 @@ async def init_db_pool():
                 password=db_pass,
                 min_size=1,
                 max_size=5,        # Lightsail 부하 방지를 위해 축소
-                timeout=5.0  # 연결 시도 시 타임아웃 (초 단위)
+                timeout=5.0  # 연결 시도 시 타임아웃 (초 단위)free -m
             )
             logger.info("✅ Async DB Pool initialized successfully.")
         except Exception as e:

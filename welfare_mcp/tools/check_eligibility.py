@@ -59,6 +59,7 @@ async def init_db_pool():
     description="사용자의 나이와 가구 형태를 기준으로 신청 가능한 복지 서비스를 검색합니다."
 )
 async def check_eligibility(
+    query_text: str,  # 사용자의 질문 내용을 인자로 받아야 합니다!
     age: int,
     household_type: Literal["SINGLE", "PARENT_CHILD", "COUPLE", "SINGLE_PARENT", "OTHER"] | None = None
 ) -> Dict[str, Any]:
@@ -79,19 +80,38 @@ async def check_eligibility(
     keyword = household_map.get(household_type, "")
     pattern = f"%{keyword}%" if keyword else "%"
 
+    # [핵심] 사용자의 질문을 벡터로 변환 (768차원 리스트)
+    query_embedding = model.encode(query_text).tolist()
+
     # 쿼리: age와 household_type을 모두 고려
     query = """
-        SELECT service_id, service_name, service_purpose, support_target, apply_url
-        FROM welfare_service
-        WHERE min_age <= $1 AND max_age >= $1
-          AND (household_type IS NULL OR household_type LIKE $2)
-        LIMIT 5
-    """
+            SELECT 
+            service_id, 
+            service_name, 
+            service_purpose, 
+            support_target, 
+            apply_url,
+            1 - (embedding <=> $1) AS similarity -- 유사도 계산
+            FROM welfare_service
+            WHERE 
+            -- 1. 필수 조건: 나이 필터
+            (min_age <= $2 AND max_age >= $2)
+            
+            -- 2. 선택 조건: 가구 유형 (LIKE 검색보다는 포함 여부)
+            AND (household_type IS NULL OR household_type ILIKE $3)
+            
+            -- 3. 소득 조건 추가 (만약 사용자의 소득 정보를 안다면)
+            -- AND (max_income IS NULL OR max_income >= $4)
+
+            -- 4. 유사도 높은 순으로 정렬
+            ORDER BY embedding <=> $1
+            LIMIT 5;
+        """
 
     try:
         async with db_pool.acquire() as conn:
-            # 파라미터 2개($1, $2)를 정확히 전달
-            rows = await conn.fetch(query, age, pattern)
+            # $1: query_embedding, $2: age, $3: pattern 순서대로 전달
+            rows = await conn.fetch(query, query_embedding, age, pattern)
             
         services = [
             {
