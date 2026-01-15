@@ -130,8 +130,8 @@ def run_batch():
                 min_income = EXCLUDED.min_income,
                 max_income = EXCLUDED.max_income,
                 payload = EXCLUDED.payload,
-                updated_at = NOW()
-                embedding = EXCLUDED.embedding,
+                updated_at = NOW(),
+                embedding = EXCLUDED.embedding
             """, row_data)
 
             current_page += 1
