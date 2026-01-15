@@ -124,28 +124,29 @@ def run_batch():
                     row["embedding"] = emb
 
             # 5) INSERT 실행
-            cur.execute("""
-                INSERT INTO welfare_service (
-                service_id, support_type, service_name, service_purpose,
-                apply_deadline, support_target, selection_criteria,
-                apply_method, required_documents, apply_org_name, contact_info,
-                apply_url, last_modified_time, provider_name, admin_rule, local_rule,
-                law_basis, official_required_documents, personal_verification_required_documents,
-                min_age, max_age, gender, sido, sigungu, household_type, 
-                min_income, max_income, payload, embedding
-            )
-            VALUES (
-                %(service_id)s, %(support_type)s, %(service_name)s, %(service_purpose)s,
-                %(apply_deadline)s, %(support_target)s, %(selection_criteria)s,
-                %(apply_method)s, %(required_documents)s, %(apply_org_name)s, %(contact_info)s,
-                %(apply_url)s, %(last_modified_time)s, %(provider_name)s, %(admin_rule)s, %(local_rule)s,
-                %(law_basis)s, %(official_required_documents)s, %(personal_verification_required_documents)s,
-                %(min_age)s, %(max_age)s, %(gender)s, %(sido)s, %(sigungu)s, %(household_type)s,
-                %(min_income)s, %(max_income)s, %(payload)s::jsonb, %(embedding)s
-            )
-            ON CONFLICT (service_id)
-            DO UPDATE SET
-                -- [수정] 원문 데이터도 모두 업데이트 (데이터 동기화)
+            for row_data in parsed_rows:
+                cur.execute("""
+                    INSERT INTO welfare_service (
+                    service_id, support_type, service_name, service_purpose,
+                    apply_deadline, support_target, selection_criteria,
+                    apply_method, required_documents, apply_org_name, contact_info,
+                    apply_url, last_modified_time, provider_name, admin_rule, local_rule,
+                    law_basis, official_required_documents, personal_verification_required_documents,
+                    min_age, max_age, gender, sido, sigungu, household_type, 
+                    min_income, max_income, payload, embedding
+                )
+                VALUES (
+                    %(service_id)s, %(support_type)s, %(service_name)s, %(service_purpose)s,
+                    %(apply_deadline)s, %(support_target)s, %(selection_criteria)s,
+                    %(apply_method)s, %(required_documents)s, %(apply_org_name)s, %(contact_info)s,
+                    %(apply_url)s, %(last_modified_time)s, %(provider_name)s, %(admin_rule)s, %(local_rule)s,
+                    %(law_basis)s, %(official_required_documents)s, %(personal_verification_required_documents)s,
+                    %(min_age)s, %(max_age)s, %(gender)s, %(sido)s, %(sigungu)s, %(household_type)s,
+                    %(min_income)s, %(max_income)s, %(payload)s::jsonb, %(embedding)s
+                )
+                ON CONFLICT (service_id)
+                DO UPDATE SET
+                    -- [수정] 원문 데이터도 모두 업데이트 (데이터 동기화)
                         service_name = EXCLUDED.service_name,
                         service_purpose = EXCLUDED.service_purpose,
                         apply_deadline = EXCLUDED.apply_deadline,
@@ -176,7 +177,7 @@ def run_batch():
                         payload = EXCLUDED.payload,
                         embedding = EXCLUDED.embedding,
                         updated_at = NOW()
-            """, row_data)
+                """, row_data)
 
             current_page += 1
             cur.execute("update batch_run set checkpoint = %s where id = %s", 
@@ -185,7 +186,7 @@ def run_batch():
             
             # 페이지 전환 시 로그 출력하여 데이터 변화 감시
             if items:
-                print(f"Page {current_page} saved {len(items)} items).")
+                print(f"Page {current_page-1} saved {len(items)} items).")
 
         cur.execute("update batch_run set status='SUCCESS', finished_at=now() where id=%s", (batch_id,))
         conn.commit()
