@@ -68,7 +68,8 @@ async def required_documents(
             SELECT 
                 service_id, 
                 required_documents, 
-                officer_documents, 
+                official_required_documents,
+                personal_verification_documents,
                 self_documents
             FROM welfare_service
             WHERE service_id = %s;
