@@ -9,7 +9,7 @@ from mcp_container import mcp
 from sentence_transformers import SentenceTransformer
 
 # -------------------------------------------------
-# 1. 설정 및 모델 로드
+# 1. 설정 및 모델 로드 (동일)
 # -------------------------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ model = SentenceTransformer('jhgan/ko-sroberta-multitask')
 logger.info("✅ Model loaded successfully.")
 
 # -------------------------------------------------
-# 2. DB Pool 전역 관리
+# 2. DB Pool (동일)
 # -------------------------------------------------
 db_pool: asyncpg.Pool | None = None
 _init_lock = asyncio.Lock()
@@ -47,9 +47,10 @@ async def init_db_pool():
             raise 
 
 # -------------------------------------------------
-# 3. 유틸리티 함수: 의도 기반 키워드 추출
+# 3. 키워드 추출 (동일)
 # -------------------------------------------------
 def extract_intent_keywords(query: str) -> List[str]:
+    # (이전과 동일한 로직 유지)
     intent_map = {
         "job": {
             "triggers": ["취업", "일자리", "구직", "채용", "알바", "인턴", "근로", "고용"],
@@ -64,12 +65,8 @@ def extract_intent_keywords(query: str) -> List[str]:
             "keywords": ["%주거%", "%전세%", "%임대%", "%주택%", "%보증금%"]
         },
         "finance": {
-            "triggers": ["금융", "대출", "이자", "적금", "자산", "목돈"],
-            "keywords": ["%금융%", "%대출%", "%융자%", "%적금%", "%이자%"]
-        },
-        "care": {
-            "triggers": ["육아", "돌봄", "어린이집", "보육", "임신", "출산"],
-            "keywords": ["%육아%", "%돌봄%", "%보육%", "%임신%", "%출산%"]
+            "triggers": ["금융", "대출", "이자", "적금", "자산", "목돈", "지원금"],
+            "keywords": ["%금융%", "%대출%", "%융자%", "%적금%", "%이자%", "%지원금%"]
         }
     }
     found_keywords = []
@@ -84,11 +81,11 @@ def extract_intent_keywords(query: str) -> List[str]:
     return list(set(found_keywords))
 
 # -------------------------------------------------
-# 4. MCP Tool: check_eligibility
+# 4. MCP Tool: check_eligibility (유연한 검색)
 # -------------------------------------------------
 @mcp.tool(
     name="check_eligibility",
-    description="사용자의 지역, 성별, 나이를 기반으로 최적의 서비스를 검색합니다."
+    description="사용자의 지역, 성별, 나이를 기반으로 최적의 서비스를 검색합니다. (유연한 매칭)"
 )
 async def check_eligibility(
     query_text: str, 
@@ -100,45 +97,86 @@ async def check_eligibility(
     
     if db_pool is None: await init_db_pool()
 
-    # 1. 전처리 및 임베딩
-    cleaned_query = re.sub(r'\d+살|\d+세', '', query_text).strip()
-    query_embedding = str(model.encode(cleaned_query).tolist())
+    # 1. 쿼리 전처리
+    cleaned_query = re.sub(r'\d+살|\d+세|\d+', '', query_text).strip()
+    if not cleaned_query: cleaned_query = query_text
     
-    # [중요] 2. 키워드 추출 실행 (이전 코드에서 누락된 부분)
-    target_keywords = extract_intent_keywords(cleaned_query)
+    query_embedding = str(model.encode(cleaned_query).tolist())
+    target_keywords = extract_intent_keywords(query_text)
+
+    # 2. 지역명 전처리 (유연한 매칭을 위해)
+    # 예: "서울특별시" -> "%서울%"
+    sido_pattern = f"%{sido[:2]}%" if sido and len(sido) >= 2 else "%"
 
     try:
-        # [수정] LIKE ANY($5)를 사용하여 동적 키워드 매칭
+        # [핵심 변경] WHERE 절을 최소화하고 ORDER BY에 점수 로직 집중
         query = """
             SELECT 
-                service_id, service_name, service_purpose, apply_url,
-                (1 - (embedding <=> $1)) AS vector_score,
-                (CASE 
-                    WHEN service_name LIKE ANY($5::text[]) OR service_purpose LIKE ANY($5::text[]) THEN 1
-                    ELSE 0 
-                 END) AS is_keyword_match
+                service_id, 
+                service_name, 
+                service_purpose, 
+                apply_url,
+                -- 디버깅용 점수 출력
+                (1 - (embedding <=> $1))::float AS vector_score,
+                
+                -- [점수 계산 로직]
+                (
+                    -- 1. 키워드 매칭 (+0.4점)
+                    (CASE 
+                        WHEN service_name LIKE ANY($5::text[]) OR service_purpose LIKE ANY($5::text[]) THEN 0.4 
+                        ELSE 0 
+                    END) +
+                    -- 2. 지역 일치 (+0.3점) - 전국(NULL)이거나 내 지역과 비슷하면 점수 부여
+                    (CASE 
+                        WHEN sido IS NULL OR sido = '' THEN 0.1  -- 전국 지원은 기본 점수
+                        WHEN sido ILIKE $3 THEN 0.3              -- 내 지역이면 가산점
+                        ELSE 0 
+                    END) +
+                    -- 3. 성별 일치 (+0.1점)
+                    (CASE 
+                        WHEN gender IS NULL OR gender = 'ALL' THEN 0.05
+                        WHEN gender = $4 THEN 0.1 
+                        ELSE 0 
+                    END)
+                )::float AS total_bonus
+                 
             FROM welfare_service
-            WHERE (min_age <= $2 AND max_age >= $2)
-            AND (sido IS NULL OR sido = $3)
-            AND (gender = 'ALL' OR gender = $4)
-            ORDER BY is_keyword_match DESC, vector_score DESC
+            WHERE 
+                -- [최소한의 필터] 나이는 법적 요건이므로 지켜야 함 (단, NULL 안전 처리)
+                (COALESCE(min_age, 0) <= $2 AND (max_age IS NULL OR max_age = 0 OR max_age >= $2))
+                
+                -- [지역 필터 완화]
+                -- 아예 다른 지역(예: 서울인데 부산 서비스)은 제외하되, 
+                -- '전국(NULL)'이나 '빈 값'은 살려둠.
+                AND (sido IS NULL OR sido = '' OR sido ILIKE $3)
+
+            -- [정렬] 벡터 점수 + 보너스 점수 합산 내림차순
+            ORDER BY (vector_score + total_bonus) DESC
             LIMIT 5;
         """
 
         async with db_pool.acquire() as conn:
-            # $5 자리에 target_keywords 리스트 전달
-            rows = await conn.fetch(query, query_embedding, age, sido, gender, target_keywords)
+            # $3에 sido_pattern("%서울%") 전달하여 ILIKE 매칭 유도
+            rows = await conn.fetch(query, query_embedding, age, sido_pattern, gender, target_keywords)
             
         services = [
             {
                 "service_id": r["service_id"],
                 "name": r["service_name"],
                 "purpose": r["service_purpose"],
-                "url": r["apply_url"] if r["apply_url"] else ""
+                "url": r["apply_url"] if r["apply_url"] else "",
+                # 점수 확인용
+                "total_score": round(r["vector_score"] + r["total_bonus"], 4)
             } for r in rows
         ]
         
-        return {"count": len(services), "recommended_services": services}
+        return {
+            "count": len(services),
+            "search_strategy": "Soft Filtering (Score-based)",
+            "query_used": cleaned_query,
+            "recommended_services": services
+        }
+        
     except Exception as e:
         logger.error(f"❌ Eligibility Error: {e}")
         return {"error": str(e)}
