@@ -44,8 +44,7 @@ async def init_db_pool():
                 password=db_pass,
                 min_size=1,
                 max_size=3,        # Lightsail 메모리 부족 방지
-                connect_timeout=5,  # 접속 타임아웃 설정
-                command_timeout=10  # 쿼리 타임아웃 설정
+                timeout=5.0  # 연결 시도 시 타임아웃 (초 단위)
             )
             logger.info("✅ Async DB Pool initialized successfully.")
         except Exception as e:
