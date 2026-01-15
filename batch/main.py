@@ -28,7 +28,7 @@ def run_batch():
     conn = None
     batch_id = None
 
-    # [최적화 1] 모델을 루프 밖에서 한 번만 로드 (메모리 절약 및 속도 향상)
+    # [최적화 1] 모델을 루프 밖에서 한 번만 로드
     print(f"Loading Embedding Model ({MODEL_NAME})...")
     try:
         model = SentenceTransformer(MODEL_NAME)
@@ -40,9 +40,7 @@ def run_batch():
     try:
         # DB 연결
         conn = dbConn()
-        # Batch 작업 중에는 자동 커밋 비활성화
         conn.autocommit = False
-        # DB 커서 생성
         cur = conn.cursor()
 
         # Advisory Lock (중복 실행 방지)
@@ -82,26 +80,25 @@ def run_batch():
                 break
 
             # --- [최적화 2] 데이터 전처리 및 배치 수집 단계 ---
-            target_texts = []   # 임베딩할 텍스트들을 모아둘 리스트
-            parsed_rows = []    # DB에 넣을 데이터를 모아둘 리스트
+            target_texts = []   # 임베딩할 텍스트 리스트
+            parsed_rows = []    # DB에 넣을 데이터 리스트
 
             for item in items:
-                # 1) FIELD_MAPPING에 정의된 모든 컬럼 추출
+                # 1) 필드 매핑
                 row_data = {db_col: (item.get(api_key) or "") for api_key, db_col in FIELD_MAPPING.items()}
             
-                # 2) [수정] provider_name 기반 지역 추출 (중앙정부 vs 지자체)
+                # 2) 지역 추출
                 provider = row_data.get("provider_name", "")
-                sido, sigungu = parse_region(provider) # 분리된 모듈 호출
+                sido, sigungu = parse_region(provider)
 
-                # 2) [추가] 지원 대상 텍스트에서 나이/성별 파
+                # 3) 지원 대상 텍스트 추출 및 파싱
                 target_text = row_data.get("support_target", "")
                 target_texts.append(target_text)
-                # 3) 나이/성별 파싱
-                min_v, max_v, gen_v = parse_target_info(target_text)
-                # 4) 가구형태 및 소득 파싱
-                household_type,min_income,max_income=parse_welfare_details(row_data)
                 
-                # 5) row_data 통합 (DB 컬럼명과 일치해야 함)
+                min_v, max_v, gen_v = parse_target_info(target_text)
+                household_type, min_income, max_income = parse_welfare_details(row_data)
+                
+                # 4) row_data 통합
                 row_data.update({
                     "min_age": min_v,
                     "max_age": max_v,
@@ -115,38 +112,35 @@ def run_batch():
                 })
                 parsed_rows.append(row_data)
 
+            # --- [최적화 3] 배치 임베딩 생성 (for문 밖) ---
             if target_texts:
-                # 한 번에 임베딩 벡터들 생성
                 embeddings = model.encode(target_texts, show_progress_bar=True).tolist()
-
-                # 생성된 벡터를 각 데이터에 할당
                 for row, emb in zip(parsed_rows, embeddings):
                     row["embedding"] = emb
 
-            # 5) INSERT 실행
-            for row_data in parsed_rows:
+            # --- [✅ 수정] 5) INSERT 실행 (루프 구조 주의) ---
+            for row in parsed_rows:
                 cur.execute("""
                     INSERT INTO welfare_service (
-                    service_id, support_type, service_name, service_purpose,
-                    apply_deadline, support_target, selection_criteria,
-                    apply_method, required_documents, apply_org_name, contact_info,
-                    apply_url, last_modified_time, provider_name, admin_rule, local_rule,
-                    law_basis, official_required_documents, personal_verification_required_documents,
-                    min_age, max_age, gender, sido, sigungu, household_type, 
-                    min_income, max_income, payload, embedding
-                )
-                VALUES (
-                    %(service_id)s, %(support_type)s, %(service_name)s, %(service_purpose)s,
-                    %(apply_deadline)s, %(support_target)s, %(selection_criteria)s,
-                    %(apply_method)s, %(required_documents)s, %(apply_org_name)s, %(contact_info)s,
-                    %(apply_url)s, %(last_modified_time)s, %(provider_name)s, %(admin_rule)s, %(local_rule)s,
-                    %(law_basis)s, %(official_required_documents)s, %(personal_verification_required_documents)s,
-                    %(min_age)s, %(max_age)s, %(gender)s, %(sido)s, %(sigungu)s, %(household_type)s,
-                    %(min_income)s, %(max_income)s, %(payload)s::jsonb, %(embedding)s
-                )
-                ON CONFLICT (service_id)
-                DO UPDATE SET
-                    -- [수정] 원문 데이터도 모두 업데이트 (데이터 동기화)
+                        service_id, support_type, service_name, service_purpose,
+                        apply_deadline, support_target, selection_criteria,
+                        apply_method, required_documents, apply_org_name, contact_info,
+                        apply_url, last_modified_time, provider_name, admin_rule, local_rule,
+                        law_basis, official_required_documents, personal_verification_required_documents,
+                        min_age, max_age, gender, sido, sigungu, household_type, 
+                        min_income, max_income, payload, embedding
+                    )
+                    VALUES (
+                        %(service_id)s, %(support_type)s, %(service_name)s, %(service_purpose)s,
+                        %(apply_deadline)s, %(support_target)s, %(selection_criteria)s,
+                        %(apply_method)s, %(required_documents)s, %(apply_org_name)s, %(contact_info)s,
+                        %(apply_url)s, %(last_modified_time)s, %(provider_name)s, %(admin_rule)s, %(local_rule)s,
+                        %(law_basis)s, %(official_required_documents)s, %(personal_verification_required_documents)s,
+                        %(min_age)s, %(max_age)s, %(gender)s, %(sido)s, %(sigungu)s, %(household_type)s,
+                        %(min_income)s, %(max_income)s, %(payload)s::jsonb, %(embedding)s
+                    )
+                    ON CONFLICT (service_id)
+                    DO UPDATE SET
                         service_name = EXCLUDED.service_name,
                         service_purpose = EXCLUDED.service_purpose,
                         apply_deadline = EXCLUDED.apply_deadline,
@@ -164,8 +158,6 @@ def run_batch():
                         law_basis = EXCLUDED.law_basis,
                         official_required_documents = EXCLUDED.official_required_documents,
                         personal_verification_required_documents = EXCLUDED.personal_verification_required_documents,
-                        
-                        -- 파싱 데이터 업데이트
                         min_age = EXCLUDED.min_age,
                         max_age = EXCLUDED.max_age,
                         gender = EXCLUDED.gender,
@@ -177,17 +169,18 @@ def run_batch():
                         payload = EXCLUDED.payload,
                         embedding = EXCLUDED.embedding,
                         updated_at = NOW()
-                """, row_data)
+                """, row)
 
+            # --- [✅ 핵심 수정] 100개 저장 완료 후 페이지 업데이트 및 커밋 ---
+            # 아래 코드들의 들여쓰기는 'while True'에 맞춰져야 합니다 (for row in parsed_rows 밖임)
             current_page += 1
             cur.execute("update batch_run set checkpoint = %s where id = %s", 
                 (json.dumps({"page": current_page}), batch_id))
             conn.commit()
             
-            # 페이지 전환 시 로그 출력하여 데이터 변화 감시
-            if items:
-                print(f"Page {current_page-1} saved {len(items)} items).")
+            print(f"Page {current_page - 1} saved ({len(items)} items).")
 
+        # --- 모든 페이지(while)가 끝난 후 성공 처리 ---
         cur.execute("update batch_run set status='SUCCESS', finished_at=now() where id=%s", (batch_id,))
         conn.commit()
 
