@@ -5,13 +5,17 @@ from typing import Literal, List, Dict, Any
 
 import asyncpg
 from mcp_container import mcp
-
-# 만약 UserProfile 엔티티가 별도 파일에 있다면 임포트 유지
-# from backend.entity.UserProfile import UserProfile
+# [수정] 필요한 라이브러리 추가
+from sentence_transformers import SentenceTransformer
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# [수정] 모델을 전역에서 한 번만 로드 (함수 밖으로 빼야 함)
+logger.info("📡 Loading Embedding Model...")
+model = SentenceTransformer('jhgan/ko-sroberta-multitask')
+logger.info("✅ Model loaded successfully.")
 
 # -------------------------------------------------
 # DB Pool 전역 관리 및 초기화 락
@@ -21,20 +25,17 @@ _init_lock = asyncio.Lock()
 
 async def init_db_pool():
     global db_pool
-    
     async with _init_lock:
         if db_pool is not None:
             return
-
         try:
-            # 환경 변수 로드 및 타입 변환 (중요!)
             db_host = os.getenv("DB_HOST", "postgres")
-            db_port = int(os.getenv("DB_PORT", "5432")) # 정수 변환 확인
+            db_port = int(os.getenv("DB_PORT", "5432"))
             db_name = os.getenv("DB_NAME")
             db_user = os.getenv("DB_USERNAME")
             db_pass = os.getenv("DB_PASSWORD")
 
-            logger.info(f"🚀 Connecting to DB: {db_host}:{db_port} (Timeout: 5s)")
+            logger.info(f"🚀 Connecting to DB: {db_host}:{db_port}")
 
             db_pool = await asyncpg.create_pool(
                 host=db_host,
@@ -43,8 +44,8 @@ async def init_db_pool():
                 user=db_user,
                 password=db_pass,
                 min_size=1,
-                max_size=3,        # Lightsail 메모리 부족 방지
-                timeout=5.0  # 연결 시도 시 타임아웃 (초 단위)
+                max_size=3,
+                timeout=5.0
             )
             logger.info("✅ Async DB Pool initialized successfully.")
         except Exception as e:
@@ -56,21 +57,18 @@ async def init_db_pool():
 # -------------------------------------------------
 @mcp.tool(
     name="check_eligibility",
-    description="사용자의 나이와 가구 형태를 기준으로 신청 가능한 복지 서비스를 검색합니다."
+    description="사용자의 질문 내용과 나이, 가구 형태를 기반으로 적합한 복지 서비스를 검색합니다."
 )
 async def check_eligibility(
-    query_text: str,  # 사용자의 질문 내용을 인자로 받아야 합니다!
+    query_text: str, 
     age: int,
     household_type: Literal["SINGLE", "PARENT_CHILD", "COUPLE", "SINGLE_PARENT", "OTHER"] | None = None
 ) -> Dict[str, Any]:
     
     if db_pool is None:
-        try:
-            await init_db_pool()
-        except Exception:
-            return {"error": "DB 연결에 실패했습니다. 잠시 후 다시 시도해 주세요."}
+        await init_db_pool()
 
-    # 가구 형태 검색용 패턴 (household_type이 있을 경우만 처리)
+    # 가구 형태 매핑
     household_map = {
         "SINGLE": "1인",
         "SINGLE_PARENT": "한부모",
@@ -80,37 +78,29 @@ async def check_eligibility(
     keyword = household_map.get(household_type, "")
     pattern = f"%{keyword}%" if keyword else "%"
 
-    # [핵심] 사용자의 질문을 벡터로 변환 (768차원 리스트)
-    query_embedding = model.encode(query_text).tolist()
+    try:
+        # [핵심] 텍스트 임베딩 변환
+        # asyncpg는 리스트 형태의 벡터를 지원하므로 .tolist() 필수
+        query_embedding = model.encode(query_text).tolist()
 
-    # 쿼리: age와 household_type을 모두 고려
-    query = """
+        # 쿼리 실행
+        query = """
             SELECT 
-            service_id, 
-            service_name, 
-            service_purpose, 
-            support_target, 
-            apply_url,
-            1 - (embedding <=> $1) AS similarity -- 유사도 계산
+                service_id, 
+                service_name, 
+                service_purpose, 
+                support_target, 
+                apply_url,
+                1 - (embedding <=> $1) AS similarity
             FROM welfare_service
-            WHERE 
-            -- 1. 필수 조건: 나이 필터
-            (min_age <= $2 AND max_age >= $2)
-            
-            -- 2. 선택 조건: 가구 유형 (LIKE 검색보다는 포함 여부)
-            AND (household_type IS NULL OR household_type ILIKE $3)
-            
-            -- 3. 소득 조건 추가 (만약 사용자의 소득 정보를 안다면)
-            -- AND (max_income IS NULL OR max_income >= $4)
-
-            -- 4. 유사도 높은 순으로 정렬
+            WHERE (min_age <= $2 AND max_age >= $2)
+              AND (household_type IS NULL OR household_type ILIKE $3)
             ORDER BY embedding <=> $1
             LIMIT 5;
         """
 
-    try:
         async with db_pool.acquire() as conn:
-            # $1: query_embedding, $2: age, $3: pattern 순서대로 전달
+            # $1: embedding, $2: age, $3: pattern
             rows = await conn.fetch(query, query_embedding, age, pattern)
             
         services = [
@@ -118,7 +108,8 @@ async def check_eligibility(
                 "service_id": r["service_id"],
                 "name": r["service_name"],
                 "purpose": r["service_purpose"],
-                "url": r["apply_url"] if r["apply_url"] else ""
+                "url": r["apply_url"] if r["apply_url"] else "",
+                "similarity": round(float(r["similarity"]), 4) # 유사도 확인용
             } for r in rows
         ]
         
@@ -127,12 +118,6 @@ async def check_eligibility(
             "recommended_services": services
         }
     except Exception as e:
-        logger.error(f"❌ DB Query Error: {e}")
-        return {"error": "데이터 조회 중 오류가 발생했습니다."}
-
-# @mcp.
-# async def shutdown():
-#     global db_pool
-#     if db_pool:
-#         await db_pool.close()
-#         logger.info("👋 Database Pool closed.")
+        # [수정] 에러 로그를 아주 상세하게 출력하도록 변경 (원인 파악용)
+        logger.error(f"❌ DB Query Error: {str(e)}", exc_info=True)
+        return {"error": f"조회 중 오류가 발생했습니다: {str(e)}"}
