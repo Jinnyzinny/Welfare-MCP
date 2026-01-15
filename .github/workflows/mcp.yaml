@@ -65,12 +65,12 @@ jobs:
           set -e
           cd /home/ubuntu/app
 
-          sudo docker-compose down || true
-
-          sudo docker system prune -f
-
           sudo docker-compose pull server nginx postgres
+
+          sudo docker-compose down --remove-orphans || true
+
           sudo docker-compose up -d 
 
+          sudo docker system prune -f
           sudo docker ps
           EOF
