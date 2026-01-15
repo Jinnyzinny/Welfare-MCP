@@ -117,6 +117,11 @@ def run_batch():
                 embeddings = model.encode(target_texts, show_progress_bar=True).tolist()
                 for row, emb in zip(parsed_rows, embeddings):
                     row["embedding"] = emb
+            
+            # --- [디버깅용 로그] 저장하기 전에 ID들을 눈으로 확인 ---
+            print(f"--- [DEBUG] Page {current_page} ID Check ---")
+            id_list = [r.get('service_id') for r in parsed_rows[:5]] # 앞의 5개만 확인
+            print(f"IDs to insert: {id_list}")
 
             # --- [✅ 수정] 5) INSERT 실행 (루프 구조 주의) ---
             for row in parsed_rows:
