@@ -67,8 +67,8 @@ jobs:
 
           docker system prune -f
 
-          docker-compose pull server
-          docker-compose up -d server nginx
+          docker-compose pull server nginx postgres
+          docker-compose up -d 
 
           docker ps
           EOF
