@@ -9,6 +9,7 @@ from psycopg2.pool import ThreadedConnectionPool
 from backend.entity.UserProfile import UserProfile
 from backend.entity.EligibilityResult import EligibilityResult
 from mcp_container import mcp
+
 from tools.OpenAPI.getOpenAPI import (
     get_welfare_supportConditions, 
     get_welfare_serviceDetail, 
@@ -29,11 +30,11 @@ try:
     db_pool = ThreadedConnectionPool(
         minconn=1,
         maxconn=10,
-        host=os.getenv("DB_HOST", "localhost"),
-        database=os.getenv("DB_NAME", "your_db"),
-        user=os.getenv("DB_USER", "your_user"),
-        password=os.getenv("DB_PASSWORD", "your_password"),
-        port=os.getenv("DB_PORT", "5432")
+        host=os.getenv("DB_HOST"),
+        database=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USERNAME"),
+        password=os.getenv("DB_PASSWORD"),
+        port=os.getenv("DB_PORT")
     )
     logger.info("Database Connection Pool created successfully.")
 except Exception as e:
