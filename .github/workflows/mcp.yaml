@@ -65,8 +65,8 @@ jobs:
           set -e
           cd /home/ubuntu/app
 
-          docker-compose pull
-          docker-compose up -d server postgres
+          docker-compose pull server
+          docker-compose up -d server
 
           # 🔥 핵심: nginx만 재시작
           docker-compose restart nginx
