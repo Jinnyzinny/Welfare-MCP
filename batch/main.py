@@ -1,4 +1,3 @@
-import psycopg2
 import json
 import os
 from fetch_page import fetch_page
