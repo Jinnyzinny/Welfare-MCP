@@ -182,8 +182,10 @@ async def check_eligibility(
                 "name": r["service_name"],
                 "purpose": r["service_purpose"],
                 "apply_url": r["apply_url"] if r["apply_url"] else "",
-                # 디버깅을 위해 점수도 함께 반환 (운영 시 제거 가능)
-                "score": round(float(r["vector_score"] + r["keyword_bonus"]), 4),
+                
+                # [수정] r["keyword_bonus"]가 Decimal 타입이므로 float로 변환 후 더해야 합니다.
+                "score": round(float(r["vector_score"]) + float(r["keyword_bonus"]), 4),
+                
                 "match_type": "Hybrid Match" if r["keyword_bonus"] > 0 else "Vector Only"
             } for r in rows
         ]
