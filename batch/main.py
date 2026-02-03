@@ -39,6 +39,7 @@ def run_batch():
     try:
         # DB 연결
         conn = dbConn()
+        # autoCommit 비활성화
         conn.autocommit = False
         cur = conn.cursor()
 
@@ -176,7 +177,6 @@ def run_batch():
                 """, row)
 
             # --- [✅ 핵심 수정] 100개 저장 완료 후 페이지 업데이트 및 커밋 ---
-            # 아래 코드들의 들여쓰기는 'while True'에 맞춰져야 합니다 (for row in parsed_rows 밖임)
             current_page += 1
             cur.execute("update batch_run set checkpoint = %s where id = %s", 
                 (json.dumps({"page": current_page}), batch_id))
@@ -188,6 +188,7 @@ def run_batch():
         cur.execute("update batch_run set status='SUCCESS', finished_at=now() where id=%s", (batch_id,))
         conn.commit()
 
+    # Batch 작업이 실패할 경우 log 처리와 DB Rollback
     except Exception as e:
         print(f"Batch Failed: {e}")
         if conn:
@@ -199,6 +200,7 @@ def run_batch():
                     conn.commit()
                 except: pass
         raise e
+    # 마지막으로 Advisory Lock 해제 및 COmmit 후 연결 종료
     finally:
         if conn:
             with conn.cursor() as final_cur:
