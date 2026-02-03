@@ -3,8 +3,10 @@ from typing import Dict, Any
 from tools.OpenAPI.fetch_gov import fetch_gov24
 from dotenv import load_dotenv
 
+# 환경 변수 로드
 load_dotenv()
 
+# OpenAPI 키 설정
 ServiceKey=os.getenv("WELFARE_API_KEY")# 여기도 수정해야함
 
 async def search_welfare_services(

@@ -8,7 +8,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 logger = logging.getLogger(__name__)
 
-# MCP 서버 설정
+# MCP 서버 설정 Singleton Pattern으로 구현
 mcp = FastMCP(
     name="Welfare MCP Server",
     stateless_http=True,
@@ -16,6 +16,8 @@ mcp = FastMCP(
     host="welfare-mcpserver.shop"
 )
 
+# MCP Streamable HTTP App 생성
+# MCP 서버를 배포하려면 이 기능을 사용해야 한다.
 mcp_http_app = mcp.streamable_http_app()
 
 @contextlib.asynccontextmanager
