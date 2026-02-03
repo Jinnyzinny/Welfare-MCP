@@ -13,12 +13,13 @@ mcp = FastMCP(
     name="Welfare MCP Server",
     stateless_http=True,
     json_response=True,
-    host="welfare-mcpserver.shop"
+    host="welfare-mcpserver.shop",
 )
 
 # MCP Streamable HTTP App 생성
 # MCP 서버를 배포하려면 이 기능을 사용해야 한다.
 mcp_http_app = mcp.streamable_http_app()
+
 
 @contextlib.asynccontextmanager
 async def lifespan(app: Starlette):
@@ -29,20 +30,22 @@ async def lifespan(app: Starlette):
         try:
             # db_pool이 정의된 파일명을 여기에 적으세요 (예: tools.check_eligibility)
             # 파일 경로에 맞춰 수정이 필요할 수 있습니다.
-            import tools.check_eligibility as db_mod 
-            if hasattr(db_mod, 'db_pool') and db_mod.db_pool:
+            import tools.check_eligibility as db_mod
+
+            if hasattr(db_mod, "db_pool") and db_mod.db_pool:
                 logging.info("🔻 Closing DB Pool safely...")
                 await db_mod.db_pool.close()
                 logging.info("✅ DB Pool closed.")
         except Exception as e:
             logging.error(f"❌ Error during DB Pool shutdown: {e}")
 
+
 base_app = Starlette(
     routes=[Mount("/", mcp_http_app)],
     lifespan=lifespan,
 )
 
-# 미들웨어 설정
+# CORS 미들웨어 설정
 app = CORSMiddleware(
     base_app,
     allow_origins=["*"],
