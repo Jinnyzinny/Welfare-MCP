@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import psycopg2
+import threading
 from typing import Literal, List, Dict, Any
 
 import asyncpg
@@ -29,7 +30,7 @@ logger.info("✅ Model loaded successfully.")
 # 2. DB Pool
 # -------------------------------------------------
 db_pool: asyncpg.Pool | None = None
-_init_lock = psycopg2.Lock()
+_init_lock = threading.Lock()
 
 
 def init_db_pool():
