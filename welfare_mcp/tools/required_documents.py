@@ -1,4 +1,5 @@
 import logging
+import threading
 import psycopg2
 import os
 import re
@@ -12,8 +13,8 @@ logger = logging.getLogger(__name__)
 # DB Connection
 # -------------------------------------------------
 db_pool: asyncpg.Pool | None = None
-_init_lock = psycopg2.Lock()
-sem = psycopg2.Semaphore(1)
+_init_lock = threading.Lock()
+sem = threading.Semaphore(1)
 
 
 def init_db_pool():
