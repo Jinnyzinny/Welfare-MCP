@@ -1,7 +1,8 @@
 import logging
 import os
 import re
-import asyncio
+import psycopg2
+import threading
 from typing import Literal, List, Dict, Any
 
 import asyncpg
@@ -10,6 +11,7 @@ from sentence_transformers import SentenceTransformer
 
 import os
 import torch
+
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 torch.set_num_threads(1)
@@ -21,19 +23,21 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 logger.info("📡 Loading Embedding Model (jhgan/ko-sroberta-multitask)...")
-model = SentenceTransformer('jhgan/ko-sroberta-multitask')
+model = SentenceTransformer("jhgan/ko-sroberta-multitask")
 logger.info("✅ Model loaded successfully.")
 
 # -------------------------------------------------
 # 2. DB Pool
 # -------------------------------------------------
 db_pool: asyncpg.Pool | None = None
-_init_lock = asyncio.Lock()
+_init_lock = threading.Lock()
 
-async def init_db_pool():
+
+def init_db_pool():
     global db_pool
-    async with _init_lock:
-        if db_pool is not None: return
+    with _init_lock:
+        if db_pool is not None:
+            return
         try:
             db_host = os.getenv("DB_HOST", "postgres")
             db_port = int(os.getenv("DB_PORT", "5432"))
@@ -42,15 +46,21 @@ async def init_db_pool():
             db_pass = os.getenv("DB_PASSWORD")
 
             logger.info(f"🚀 Connecting to DB: {db_host}:{db_port}")
-            db_pool = await asyncpg.create_pool(
-                host=db_host, port=db_port, database=db_name,
-                user=db_user, password=db_pass,
-                min_size=1, max_size=3, timeout=5.0
+            db_pool = psycopg2.create_pool(
+                host=db_host,
+                port=db_port,
+                database=db_name,
+                user=db_user,
+                password=db_pass,
+                min_size=1,
+                max_size=3,
+                timeout=5.0,
             )
             logger.info("✅ Async DB Pool initialized.")
         except Exception as e:
             logger.error(f"❌ DB Init Error: {e}")
-            raise 
+            raise
+
 
 # -------------------------------------------------
 # 3. 키워드 추출
@@ -58,54 +68,66 @@ async def init_db_pool():
 def extract_intent_keywords(query: str) -> List[str]:
     intent_map = {
         "job": {
-            "triggers": ["취업", "일자리", "구직", "채용", "알바", "인턴", "근로", "고용"],
-            "keywords": ["%취업%", "%일자리%", "%구직%", "%고용%", "%채용%", "%근로%"]
+            "triggers": [
+                "취업",
+                "일자리",
+                "구직",
+                "채용",
+                "알바",
+                "인턴",
+                "근로",
+                "고용",
+            ],
+            "keywords": ["%취업%", "%일자리%", "%구직%", "%고용%", "%채용%", "%근로%"],
         },
         "startup": {
             "triggers": ["창업", "스타트업", "사업", "1인기업", "예비창업"],
-            "keywords": ["%창업%", "%스타트업%", "%사업화%"]
+            "keywords": ["%창업%", "%스타트업%", "%사업화%"],
         },
         "housing": {
             "triggers": ["주거", "전세", "월세", "집", "임대", "보증금", "행복주택"],
-            "keywords": ["%주거%", "%전세%", "%임대%", "%주택%", "%보증금%"]
+            "keywords": ["%주거%", "%전세%", "%임대%", "%주택%", "%보증금%"],
         },
         "finance": {
             "triggers": ["금융", "대출", "이자", "적금", "자산", "목돈", "지원금"],
-            "keywords": ["%금융%", "%대출%", "%융자%", "%적금%", "%이자%", "%지원금%"]
-        }
+            "keywords": ["%금융%", "%대출%", "%융자%", "%적금%", "%이자%", "%지원금%"],
+        },
     }
     found_keywords = []
     for category, data in intent_map.items():
         if any(trigger in query for trigger in data["triggers"]):
             found_keywords.extend(data["keywords"])
-    
+
     if not found_keywords:
         words = query.split()
         found_keywords = [f"%{w}%" for w in words if len(w) >= 2]
-        
+
     return list(set(found_keywords))
+
 
 # -------------------------------------------------
 # 4. MCP Tool: check_eligibility
 # -------------------------------------------------
 @mcp.tool(
     name="check_eligibility",
-    description="사용자의 의도를 최우선으로 검색하고, 프로필(지역/성별)은 정렬 가산점으로 활용합니다."
+    description="사용자의 의도를 최우선으로 검색하고, 프로필(지역/성별)은 정렬 가산점으로 활용합니다.",
 )
 async def check_eligibility(
-    query_text: str, 
+    query_text: str,
     age: int,
     gender: Literal["MALE", "FEMALE", "ALL"] = "ALL",
     sido: str | None = None,
-    sigungu: str | None = None
+    sigungu: str | None = None,
 ) -> Dict[str, Any]:
-    
-    if db_pool is None: await init_db_pool()
+
+    if db_pool is None:
+        await init_db_pool()
 
     # 1. 쿼리 전처리
-    cleaned_query = re.sub(r'\d+살|\d+세|\d+', '', query_text).strip()
-    if not cleaned_query: cleaned_query = query_text
-    
+    cleaned_query = re.sub(r"\d+살|\d+세|\d+", "", query_text).strip()
+    if not cleaned_query:
+        cleaned_query = query_text
+
     query_embedding = str(model.encode(cleaned_query).tolist())
     target_keywords = extract_intent_keywords(query_text)
 
@@ -158,8 +180,10 @@ async def check_eligibility(
         """
 
         async with db_pool.acquire() as conn:
-            rows = await conn.fetch(query, query_embedding, age, sido_pattern, gender, target_keywords)
-            
+            rows = await conn.fetch(
+                query, query_embedding, age, sido_pattern, gender, target_keywords
+            )
+
         services = [
             {
                 "service_id": r["service_id"],
@@ -171,17 +195,20 @@ async def check_eligibility(
                     "vector": round(r["vector_score"], 2),
                     "intent": round(r["intent_bonus"], 2),
                     "profile": round(r["profile_bonus"], 2),
-                    "total": round(r["vector_score"] + r["intent_bonus"] + r["profile_bonus"], 2)
-                }
-            } for r in rows
+                    "total": round(
+                        r["vector_score"] + r["intent_bonus"] + r["profile_bonus"], 2
+                    ),
+                },
+            }
+            for r in rows
         ]
-        
+
         return {
             "count": len(services),
             "search_strategy": "Broad Intent Search (Error Fixed)",
-            "recommended_services": services
+            "recommended_services": services,
         }
-        
+
     except Exception as e:
         logger.error(f"❌ Eligibility Error: {e}")
         return {"error": str(e)}
