@@ -1,6 +1,6 @@
 requests
 python-dotenv
-psycopg2-binary
+asyncio
 tenacity
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch

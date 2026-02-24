@@ -1,4 +1,4 @@
-import psycopg2
+import asyncio
 import os
 
 from dotenv import load_dotenv 
@@ -12,7 +12,7 @@ DB_USERNAME=os.getenv("DB_USERNAME")
 DB_PASSWORD=os.getenv("DB_PASSWORD")
 # 데이터베이스 연결 설정
 def dbConn():
-    conn = psycopg2.connect(
+    conn = asyncio.connect(
         host=DB_HOST,
         database=DB_NAME,
         user=DB_USERNAME,
