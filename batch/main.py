@@ -6,6 +6,7 @@ from parse.parse_target_info import parse_target_info
 from parse.parse_welfare_details import parse_welfare_details
 from parse.parse_region import parse_region
 from parse.get_embedding import get_embedding
+from batch.parse.clean_text import clean_text
 
 # 매핑 파일에서 가져오기 (이미지 및 필드 정보를 반영한 mapping)
 from field_mapping import FIELD_MAPPING
@@ -104,18 +105,19 @@ async def run_batch():
                 sido, sigungu = parse_region(provider)
 
                 # 3) 지원 대상 텍스트 추출 및 파싱
-                target_text = row_data.get("support_target", "")
+                target_raw = row_data.get("support_target", "")
+                target_text = clean_text(target_raw)
                 target_texts.append(target_text)
 
-                min_v, max_v, gen_v = parse_target_info(target_text)
+                min_age, max_age, gender = parse_target_info(target_text)
                 household_type, min_income, max_income = parse_welfare_details(row_data)
 
                 # 4) row_data 통합
                 row_data.update(
                     {
-                        "min_age": min_v,
-                        "max_age": max_v,
-                        "gender": gen_v,
+                        "min_age": min_age,
+                        "max_age": max_age,
+                        "gender": gender,
                         "sido": sido,
                         "sigungu": sigungu,
                         "household_type": household_type,
@@ -136,6 +138,8 @@ async def run_batch():
             print(f"--- [DEBUG] Page {current_page} ID Check ---")
             id_list = [r.get("service_id") for r in parsed_rows[:5]]  # 앞의 5개만 확인
             print(f"IDs to insert: {id_list}")
+
+            print(min_age,max_age,gender,sido,sigungu,household_type,min_income,max_income)
 
             # --- [✅ 수정] 5) INSERT 실행 (루프 구조 주의) ---
             for row in parsed_rows:

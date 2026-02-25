@@ -1,7 +1,6 @@
 import logging
 import os
 import re
-import psycopg
 from psycopg_pool import ConnectionPool
 import threading
 from typing import Literal, List, Dict, Any
@@ -46,7 +45,7 @@ def init_db_pool():
             db_pass = os.getenv("DB_PASSWORD")
 
             logger.info(f"🚀 Connecting to DB: {db_host}:{db_port}")
-            db_pool = psycopg2.create_pool(
+            db_pool = ConnectionPool(
                 host=db_host,
                 port=db_port,
                 database=db_name,
@@ -110,7 +109,7 @@ def extract_intent_keywords(query: str) -> List[str]:
 # -------------------------------------------------
 @mcp.tool(
     name="check_eligibility",
-    description="사용자의 의도를 최우선으로 검색하고, 프로필(지역/성별)은 정렬 가산점으로 활용합니다.",
+    description="복지 제도를 검색하고 복지 서비스의 자격 요건을 확인합니다. 입력된 질문에서 나이, 성별, 지역 정보를 추출하여 가장 관련성 높은 서비스를 반환합니다.",
 )
 async def check_eligibility(
     query_text: str,
