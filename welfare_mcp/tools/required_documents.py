@@ -1,10 +1,10 @@
 import logging
 import threading
-import psycopg2
+import psycopg
+from psycopg_pool import ConnectionPool
 import os
 import re
 from typing import List, Literal, Dict, Any
-import asyncpg
 from mcp_container import mcp
 
 logger = logging.getLogger(__name__)
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # -------------------------------------------------
 # DB Connection
 # -------------------------------------------------
-db_pool: asyncpg.Pool | None = None
+db_pool: ConnectionPool | None = None
 _init_lock = threading.Lock()
 sem = threading.Semaphore(1)
 

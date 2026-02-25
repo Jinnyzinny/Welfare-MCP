@@ -1,11 +1,11 @@
 import logging
 import os
 import re
-import psycopg2
+import psycopg
+from psycopg_pool import ConnectionPool
 import threading
 from typing import Literal, List, Dict, Any
 
-import asyncpg
 from mcp_container import mcp
 from sentence_transformers import SentenceTransformer
 
@@ -29,7 +29,7 @@ logger.info("✅ Model loaded successfully.")
 # -------------------------------------------------
 # 2. DB Pool
 # -------------------------------------------------
-db_pool: asyncpg.Pool | None = None
+db_pool: ConnectionPool | None = None
 _init_lock = threading.Lock()
 
 
