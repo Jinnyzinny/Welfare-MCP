@@ -1,5 +1,6 @@
 import json
 import os
+import asyncio
 from fetch_page import fetch_page
 
 from parse.parse_target_info import parse_target_info
@@ -242,4 +243,4 @@ async def run_batch():
 
 
 if __name__ == "__main__":
-    run_batch()
+    asyncio.run(run_batch())
