@@ -5,4 +5,5 @@ python-dotenv
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch
 sentence-transformers
-psycopg
+psycopg[binary]
+psycopg_pool
