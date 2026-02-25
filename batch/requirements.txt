@@ -1,5 +1,6 @@
 requests
 python-dotenv
+asyncio
 psycopg[binary]
 psycopg_pool
 tenacity
