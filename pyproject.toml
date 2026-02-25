@@ -5,12 +5,12 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "asyncpg>=0.31.0",
+    "konlpy>=0.6.0",
     "mcp[cli]>=1.25.0",
     "numpy>=2.4.1",
-    "psycopg2>=2.9.11",
+    "psycopg-pool>=3.3.0",
+    "psycopg[binary]>=3.3.3",
     "requests>=2.32.5",
-    "sentence-transformers>=5.2.0",
-    "sqlalchemy>=2.0.45",
+    "sentence-transformers>=5.2.3",
     "tenacity>=9.1.2",
 ]
