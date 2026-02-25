@@ -30,7 +30,7 @@ def init_db_pool():
             db_pass = os.getenv("DB_PASSWORD")
 
             # Lightsail 2GB 환경 고려: 최소 연결 유지
-            db_pool = psycopg2.create_pool(
+            db_pool = ConnectionPool(
                 host=db_host,
                 port=db_port,
                 database=db_name,
@@ -140,12 +140,12 @@ def required_documents(
                 "status": "success",
             }
 
-        except asyncpg.UndefinedColumnError as e:
+        except psycopg.UndefinedColumnError as e:
             # 혹시라도 또 오타가 있을 경우를 대비한 로그
             logger.error(f"❌ Column Name Error: {e}")
             return {"error": f"DB 컬럼명 불일치: {str(e)}"}
 
-        except psycopg2.TimeoutError:
+        except psycopg.TimeoutError:
             return {
                 "error": "요청이 너무 많아 지연되고 있습니다. 잠시 후 다시 시도해주세요."
             }

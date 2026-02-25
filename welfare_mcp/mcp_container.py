@@ -20,7 +20,6 @@ mcp = FastMCP(
 # MCP 서버를 배포하려면 이 기능을 사용해야 한다.
 mcp_http_app = mcp.streamable_http_app()
 
-
 @contextlib.asynccontextmanager
 async def lifespan(app: Starlette):
     # [시작] MCP 세션 실행
