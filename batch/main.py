@@ -6,7 +6,7 @@ from parse.parse_target_info import parse_target_info
 from parse.parse_welfare_details import parse_welfare_details
 from parse.parse_region import parse_region
 from parse.get_embedding import get_embedding
-from batch.parse.clean_text import clean_text
+from parse.clean_text import clean_text
 
 # 매핑 파일에서 가져오기 (이미지 및 필드 정보를 반영한 mapping)
 from field_mapping import FIELD_MAPPING
