@@ -2,6 +2,8 @@ import os
 from tenacity import retry, stop_after_attempt, wait_fixed
 import requests
 
+from dotenv import load_dotenv
+load_dotenv()
 # 1. 환경 변수 및 설정
 API_KEY = os.environ["WELFARE_API_KEY"]
 

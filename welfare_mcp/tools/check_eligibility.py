@@ -109,7 +109,7 @@ def extract_intent_keywords(query: str) -> List[str]:
 # -------------------------------------------------
 @mcp.tool(
     name="check_eligibility",
-    description="복지 제도를 검색하고 복지 서비스의 자격 요건을 확인합니다. 입력된 질문에서 나이, 성별, 지역 정보를 추출하여 가장 관련성 높은 서비스를 반환합니다.",
+    description="사용자가 상태를 입력하고 사용자의 상태에서 가장 관련성 높은 복지 제도를 추천합니다. 입력된 질문에서 나이, 성별, 지역 정보를 추출하여 가장 관련성 높은 서비스를 반환합니다.",
 )
 async def check_eligibility(
     query_text: str,
