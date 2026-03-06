@@ -54,11 +54,13 @@ def init_db_pool():
 
             logger.info(f"🚀 Connecting to DB: {db_host}:{db_port}")
 
+            # open=False 로 deprecated 경고 제거 (open()은 비동기 컨텍스트에서 호출)
             db_pool = AsyncConnectionPool(
                 conninfo=f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}",
                 min_size=1,
                 max_size=3,
-                kwargs={"row_factory": dict_row},  # dict row 반환
+                open=False,
+                kwargs={"row_factory": dict_row},
             )
 
             logger.info("✅ Async DB Pool initialized.")
@@ -121,6 +123,12 @@ async def check_eligibility(
     if db_pool is None:
         init_db_pool()
 
+    # pool이 아직 열리지 않은 경우 open
+    if not db_pool.closed:
+        pass
+    else:
+        await db_pool.open()
+
     # -------------------------------------------------
     # Query preprocessing
     # -------------------------------------------------
@@ -128,15 +136,19 @@ async def check_eligibility(
     if not cleaned_query:
         cleaned_query = query_text
 
-    query_embedding = model.encode(cleaned_query).tolist()
+    # embedding을 문자열로 변환 → PostgreSQL이 vector 타입으로 캐스팅 가능하게
+    raw_embedding = model.encode(cleaned_query).tolist()
+    query_embedding = "[" + ",".join(str(x) for x in raw_embedding) + "]"
+
     target_keywords = extract_intent_keywords(query_text)
 
     # 지역 패턴
     sido_pattern = f"%{sido[:2]}%" if sido and len(sido) >= 2 else "%"
 
     try:
-
-        query = """
+        # psycopg3 스타일 파라미터 ($1, $2, ...)
+        # $1::vector 로 명시적 캐스팅 → "operator does not exist: vector <=> double precision[]" 해결
+        sql = """
         SELECT * FROM (
             SELECT 
                 service_id,
@@ -144,11 +156,11 @@ async def check_eligibility(
                 service_purpose,
                 apply_url,
 
-                (1 - (embedding <=> %s))::float AS vector_score,
+                (1 - (embedding <=> $1::vector))::float AS vector_score,
 
                 (CASE
-                    WHEN service_name LIKE ANY(%s)
-                    OR service_purpose LIKE ANY(%s)
+                    WHEN service_name LIKE ANY($2::text[])
+                    OR service_purpose LIKE ANY($3::text[])
                     THEN 0.5
                     ELSE 0
                 END)::float AS intent_bonus,
@@ -156,13 +168,13 @@ async def check_eligibility(
                 (
                     (CASE
                         WHEN sido IS NULL OR sido = '' THEN 0.1
-                        WHEN sido ILIKE %s THEN 0.2
+                        WHEN sido ILIKE $4 THEN 0.2
                         ELSE 0
                     END)
                     +
                     (CASE
                         WHEN gender IS NULL OR gender = 'ALL' THEN 0.05
-                        WHEN gender = %s THEN 0.1
+                        WHEN gender = $5 THEN 0.1
                         ELSE 0
                     END)
                 )::float AS profile_bonus
@@ -170,8 +182,8 @@ async def check_eligibility(
             FROM welfare_service
 
             WHERE
-                COALESCE(min_age,0) <= %s
-                AND (max_age IS NULL OR max_age = 0 OR max_age >= %s)
+                COALESCE(min_age, 0) <= $6
+                AND (max_age IS NULL OR max_age = 0 OR max_age >= $7)
 
         ) AS sub_query
 
@@ -182,15 +194,15 @@ async def check_eligibility(
         async with db_pool.connection() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
-                    query,
+                    sql,
                     (
-                        query_embedding,   # vector
-                        target_keywords,   # intent name
-                        target_keywords,   # intent purpose
-                        sido_pattern,      # region
-                        gender,            # gender
-                        age,               # min_age
-                        age,               # max_age
+                        query_embedding,   # $1 → vector (문자열로 넘기면 ::vector 캐스팅 적용됨)
+                        target_keywords,   # $2 → intent name
+                        target_keywords,   # $3 → intent purpose
+                        sido_pattern,      # $4 → region
+                        gender,            # $5 → gender
+                        age,               # $6 → min_age
+                        age,               # $7 → max_age
                     ),
                 )
 
