@@ -46,15 +46,11 @@ def init_db_pool():
 
             logger.info(f"🚀 Connecting to DB: {db_host}:{db_port}")
             db_pool = ConnectionPool(
-                host=db_host,
-                port=db_port,
-                database=db_name,
-                user=db_user,
-                password=db_pass,
+                conninfo=f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}",
                 min_size=1,
                 max_size=3,
                 timeout=5.0,
-            )
+            )       
             logger.info("✅ Async DB Pool initialized.")
         except Exception as e:
             logger.error(f"❌ DB Init Error: {e}")
