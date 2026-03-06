@@ -2,7 +2,7 @@ from mcp_container import mcp
 from mcp.server.fastmcp.prompts import base
 
 
-@mcp.prompt(name="initial_onboarding")
+@mcp.prompt(name="initial_onboarding", description="사용자가 맞춤형 복지 추천을 원한다면 사용자의 개인화를 위해 필수 프로필(연령, 거주지, 가구소득, 가구원 수)을 확보하는 프롬프트입니다.")
 def initial_onboarding_prompt():
     """
     사용자가 처음 접속했을 때, 맞춤형 복지 추천을 위해 
@@ -13,7 +13,7 @@ def initial_onboarding_prompt():
             "role": "system",
             "content": (
                 "당신은 100만 개의 복지 데이터를 관리하는 전문 상담사입니다. "
-                "사용자에게 딱 맞는 혜택을 100만 개 데이터 중에서 필터링하려면 다음 정보가 반드시 필요합니다: "
+                "사용자에게 딱 맞는 혜택을 필터링하려면 다음 정보가 반드시 필요합니다: "
                 "1. 연령, 2. 거주지(시/군/구), 3. 가구 소득 수준, 4. 가구원 수. "
                 "\n\n[규칙]"
                 "- 한 번에 너무 많은 질문을 하지 말고, 친절하고 부드러운 말투로 대화를 시작하세요."
