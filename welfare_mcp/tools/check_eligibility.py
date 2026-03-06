@@ -144,11 +144,11 @@ async def check_eligibility(
                 service_purpose,
                 apply_url,
 
-                (1 - (embedding <=> $1))::float AS vector_score,
+                (1 - (embedding <=> %s))::float AS vector_score,
 
                 (CASE
-                    WHEN service_name LIKE ANY($5::text[])
-                    OR service_purpose LIKE ANY($5::text[])
+                    WHEN service_name LIKE ANY(%s)
+                    OR service_purpose LIKE ANY(%s)
                     THEN 0.5
                     ELSE 0
                 END)::float AS intent_bonus,
@@ -156,13 +156,13 @@ async def check_eligibility(
                 (
                     (CASE
                         WHEN sido IS NULL OR sido = '' THEN 0.1
-                        WHEN sido ILIKE $3 THEN 0.2
+                        WHEN sido ILIKE %s THEN 0.2
                         ELSE 0
                     END)
                     +
                     (CASE
                         WHEN gender IS NULL OR gender = 'ALL' THEN 0.05
-                        WHEN gender = $4 THEN 0.1
+                        WHEN gender = %s THEN 0.1
                         ELSE 0
                     END)
                 )::float AS profile_bonus
@@ -170,8 +170,9 @@ async def check_eligibility(
             FROM welfare_service
 
             WHERE
-                (COALESCE(min_age,0) <= $2
-                AND (max_age IS NULL OR max_age = 0 OR max_age >= $2))
+                COALESCE(min_age,0) <= %s
+                AND (max_age IS NULL OR max_age = 0 OR max_age >= %s)
+
         ) AS sub_query
 
         ORDER BY (vector_score + intent_bonus + profile_bonus) DESC
@@ -182,7 +183,15 @@ async def check_eligibility(
             async with conn.cursor() as cur:
                 await cur.execute(
                     query,
-                    (query_embedding, age, sido_pattern, gender, target_keywords),
+                    (
+                        query_embedding,   # vector
+                        target_keywords,   # intent name
+                        target_keywords,   # intent purpose
+                        sido_pattern,      # region
+                        gender,            # gender
+                        age,               # min_age
+                        age,               # max_age
+                    ),
                 )
 
                 rows = await cur.fetchall()
