@@ -3,36 +3,35 @@ import os
 import re
 import threading
 from typing import Literal, List, Dict, Any
+import torch
 from psycopg_pool import AsyncConnectionPool
 from psycopg.rows import dict_row
-
-from mcp_container import mcp
 from sentence_transformers import SentenceTransformer
 
-import torch
+from mcp_container import mcp
 
 # -------------------------------------------------
-# Thread 제한 (CPU 과부하 방지)
+# Thread 제한
 # -------------------------------------------------
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 torch.set_num_threads(1)
 
 # -------------------------------------------------
-# 로깅 설정
+# 로깅
 # -------------------------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # -------------------------------------------------
-# 1. Embedding 모델 로드
+# Embedding 모델
 # -------------------------------------------------
-logger.info("📡 Loading Embedding Model (jhgan/ko-sroberta-multitask)...")
+logger.info("📡 Loading Embedding Model...")
 model = SentenceTransformer("jhgan/ko-sroberta-multitask")
-logger.info("✅ Model loaded successfully.")
+logger.info("✅ Model loaded")
 
 # -------------------------------------------------
-# 2. DB Pool
+# DB Pool
 # -------------------------------------------------
 db_pool: AsyncConnectionPool | None = None
 _init_lock = threading.Lock()
@@ -45,72 +44,67 @@ def init_db_pool():
         if db_pool is not None:
             return
 
-        try:
-            db_host = os.getenv("DB_HOST", "postgres")
-            db_port = int(os.getenv("DB_PORT", "5432"))
-            db_name = os.getenv("DB_NAME")
-            db_user = os.getenv("DB_USERNAME")
-            db_pass = os.getenv("DB_PASSWORD")
+        db_host = os.getenv("DB_HOST", "postgres")
+        db_port = int(os.getenv("DB_PORT", "5432"))
+        db_name = os.getenv("DB_NAME")
+        db_user = os.getenv("DB_USERNAME")
+        db_pass = os.getenv("DB_PASSWORD")
 
-            logger.info(f"🚀 Connecting to DB: {db_host}:{db_port}")
+        logger.info(f"🚀 Connecting DB {db_host}:{db_port}")
 
-            # open=False 로 deprecated 경고 제거 (open()은 비동기 컨텍스트에서 호출)
-            db_pool = AsyncConnectionPool(
-                conninfo=f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}",
-                min_size=1,
-                max_size=3,
-                open=False,
-                kwargs={"row_factory": dict_row},
-            )
+        db_pool = AsyncConnectionPool(
+            conninfo=f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}",
+            min_size=1,
+            max_size=3,
+            open=False,
+        )
 
-            logger.info("✅ Async DB Pool initialized.")
-
-        except Exception as e:
-            logger.error(f"❌ DB Init Error: {e}")
-            raise
+        logger.info("✅ DB Pool Ready")
 
 
 # -------------------------------------------------
-# 3. 키워드 추출
+# Intent Keyword 추출
 # -------------------------------------------------
 def extract_intent_keywords(query: str) -> List[str]:
 
     intent_map = {
         "job": {
-            "triggers": ["취업", "일자리", "구직", "채용", "알바", "인턴", "근로", "고용"],
-            "keywords": ["%취업%", "%일자리%", "%구직%", "%고용%", "%채용%", "%근로%"],
+            "triggers": ["취업", "일자리", "구직", "채용", "근로"],
+            "keywords": ["%취업%", "%일자리%", "%구직%", "%채용%", "%근로%"],
         },
         "startup": {
-            "triggers": ["창업", "스타트업", "사업", "1인기업", "예비창업"],
-            "keywords": ["%창업%", "%스타트업%", "%사업화%"],
+            "triggers": ["창업", "스타트업", "사업"],
+            "keywords": ["%창업%", "%사업%", "%스타트업%"],
         },
         "housing": {
-            "triggers": ["주거", "전세", "월세", "집", "임대", "보증금", "행복주택"],
-            "keywords": ["%주거%", "%전세%", "%임대%", "%주택%", "%보증금%"],
+            "triggers": ["주거", "전세", "월세", "임대"],
+            "keywords": ["%주거%", "%전세%", "%임대%", "%주택%"],
         },
         "finance": {
-            "triggers": ["금융", "대출", "이자", "적금", "자산", "목돈", "지원금"],
-            "keywords": ["%금융%", "%대출%", "%융자%", "%적금%", "%이자%", "%지원금%"],
+            "triggers": ["대출", "금융", "지원금"],
+            "keywords": ["%대출%", "%금융%", "%지원금%"],
         },
     }
-    found_keywords = []
-    for category, data in intent_map.items():
-        if any(trigger in query for trigger in data["triggers"]):
-            found_keywords.extend(data["keywords"])
 
-    if not found_keywords:
+    found = []
+
+    for _, data in intent_map.items():
+        if any(t in query for t in data["triggers"]):
+            found.extend(data["keywords"])
+
+    if not found:
         words = query.split()
-        found_keywords = [f"%{w}%" for w in words if len(w) >= 2]
+        found = [f"%{w}%" for w in words if len(w) >= 2]
 
-    return list(set(found_keywords))
+    return list(set(found))
 
 
 # -------------------------------------------------
-# 4. MCP Tool
+# MCP TOOL
 # -------------------------------------------------
 @mcp.tool(
     name="check_eligibility",
-    description="사용자의 나이, 성별, 지역, 질문을 기반으로 관련 복지 서비스를 추천합니다.",
+    description="사용자의 나이, 성별, 지역, 질문을 기반으로 복지 서비스를 추천합니다",
 )
 async def check_eligibility(
     query_text: str,
@@ -123,31 +117,29 @@ async def check_eligibility(
     if db_pool is None:
         init_db_pool()
 
-    # pool이 아직 열리지 않은 경우 open
-    if not db_pool.closed:
-        pass
-    else:
+    if db_pool.closed:
         await db_pool.open()
 
-    # -------------------------------------------------
-    # Query preprocessing
-    # -------------------------------------------------
+    # -----------------------------
+    # Query 정리
+    # -----------------------------
     cleaned_query = re.sub(r"\d+살|\d+세|\d+", "", query_text).strip()
+
     if not cleaned_query:
         cleaned_query = query_text
 
-    # embedding을 문자열로 변환 → PostgreSQL이 vector 타입으로 캐스팅 가능하게
-    raw_embedding = model.encode(cleaned_query).tolist()
-    query_embedding = "[" + ",".join(str(x) for x in raw_embedding) + "]"
+    # -----------------------------
+    # embedding → vector 문자열
+    # -----------------------------
+    embedding = model.encode(cleaned_query).tolist()
+    query_embedding = "[" + ",".join(map(str, embedding)) + "]"
 
     target_keywords = extract_intent_keywords(query_text)
 
-    # 지역 패턴
-    sido_pattern = f"%{sido[:2]}%" if sido and len(sido) >= 2 else "%"
+    sido_pattern = f"%{sido[:2]}%" if sido else "%"
 
     try:
-        # psycopg3 스타일 파라미터 ($1, $2, ...)
-        # $1::vector 로 명시적 캐스팅 → "operator does not exist: vector <=> double precision[]" 해결
+
         sql = """
         SELECT * FROM (
             SELECT 
@@ -156,11 +148,11 @@ async def check_eligibility(
                 service_purpose,
                 apply_url,
 
-                (1 - (embedding <=> $1::vector))::float AS vector_score,
+                (1 - (embedding <=> %s::vector))::float AS vector_score,
 
                 (CASE
-                    WHEN service_name LIKE ANY($2::text[])
-                    OR service_purpose LIKE ANY($3::text[])
+                    WHEN service_name LIKE ANY(%s)
+                    OR service_purpose LIKE ANY(%s)
                     THEN 0.5
                     ELSE 0
                 END)::float AS intent_bonus,
@@ -168,13 +160,13 @@ async def check_eligibility(
                 (
                     (CASE
                         WHEN sido IS NULL OR sido = '' THEN 0.1
-                        WHEN sido ILIKE $4 THEN 0.2
+                        WHEN sido ILIKE %s THEN 0.2
                         ELSE 0
                     END)
                     +
                     (CASE
                         WHEN gender IS NULL OR gender = 'ALL' THEN 0.05
-                        WHEN gender = $5 THEN 0.1
+                        WHEN gender = %s THEN 0.1
                         ELSE 0
                     END)
                 )::float AS profile_bonus
@@ -182,27 +174,28 @@ async def check_eligibility(
             FROM welfare_service
 
             WHERE
-                COALESCE(min_age, 0) <= $6
-                AND (max_age IS NULL OR max_age = 0 OR max_age >= $7)
+                COALESCE(min_age,0) <= %s
+                AND (max_age IS NULL OR max_age = 0 OR max_age >= %s)
 
-        ) AS sub_query
+        ) sub
 
         ORDER BY (vector_score + intent_bonus + profile_bonus) DESC
         LIMIT 5
         """
 
         async with db_pool.connection() as conn:
-            async with conn.cursor() as cur:
+            async with conn.cursor(row_factory=dict_row) as cur:
+
                 await cur.execute(
                     sql,
                     (
-                        query_embedding,   # $1 → vector (문자열로 넘기면 ::vector 캐스팅 적용됨)
-                        target_keywords,   # $2 → intent name
-                        target_keywords,   # $3 → intent purpose
-                        sido_pattern,      # $4 → region
-                        gender,            # $5 → gender
-                        age,               # $6 → min_age
-                        age,               # $7 → max_age
+                        query_embedding,
+                        target_keywords,
+                        target_keywords,
+                        sido_pattern,
+                        gender,
+                        age,
+                        age,
                     ),
                 )
 
@@ -213,7 +206,7 @@ async def check_eligibility(
                 "service_id": r["service_id"],
                 "name": r["service_name"],
                 "purpose": r["service_purpose"],
-                "url": r["apply_url"] if r["apply_url"] else "",
+                "url": r["apply_url"] or "",
                 "score_breakdown": {
                     "vector": round(r["vector_score"], 2),
                     "intent": round(r["intent_bonus"], 2),
