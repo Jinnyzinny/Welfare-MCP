@@ -1,26 +1,32 @@
 import logging
 import os
 import re
-from psycopg_pool import ConnectionPool
 import threading
 from typing import Literal, List, Dict, Any
+from psycopg_pool import AsyncConnectionPool
+from psycopg.rows import dict_row
 
 from mcp_container import mcp
 from sentence_transformers import SentenceTransformer
 
-import os
 import torch
 
+# -------------------------------------------------
+# Thread 제한 (CPU 과부하 방지)
+# -------------------------------------------------
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 torch.set_num_threads(1)
 
 # -------------------------------------------------
-# 1. 설정 및 모델 로드
+# 로깅 설정
 # -------------------------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# -------------------------------------------------
+# 1. Embedding 모델 로드
+# -------------------------------------------------
 logger.info("📡 Loading Embedding Model (jhgan/ko-sroberta-multitask)...")
 model = SentenceTransformer("jhgan/ko-sroberta-multitask")
 logger.info("✅ Model loaded successfully.")
@@ -28,15 +34,17 @@ logger.info("✅ Model loaded successfully.")
 # -------------------------------------------------
 # 2. DB Pool
 # -------------------------------------------------
-db_pool: ConnectionPool | None = None
+db_pool: AsyncConnectionPool | None = None
 _init_lock = threading.Lock()
 
 
 def init_db_pool():
     global db_pool
+
     with _init_lock:
         if db_pool is not None:
             return
+
         try:
             db_host = os.getenv("DB_HOST", "postgres")
             db_port = int(os.getenv("DB_PORT", "5432"))
@@ -45,13 +53,16 @@ def init_db_pool():
             db_pass = os.getenv("DB_PASSWORD")
 
             logger.info(f"🚀 Connecting to DB: {db_host}:{db_port}")
-            db_pool = ConnectionPool(
+
+            db_pool = AsyncConnectionPool(
                 conninfo=f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}",
                 min_size=1,
                 max_size=3,
-                timeout=5.0,
-            )       
+                kwargs={"row_factory": dict_row},  # dict row 반환
+            )
+
             logger.info("✅ Async DB Pool initialized.")
+
         except Exception as e:
             logger.error(f"❌ DB Init Error: {e}")
             raise
@@ -61,18 +72,10 @@ def init_db_pool():
 # 3. 키워드 추출
 # -------------------------------------------------
 def extract_intent_keywords(query: str) -> List[str]:
+
     intent_map = {
         "job": {
-            "triggers": [
-                "취업",
-                "일자리",
-                "구직",
-                "채용",
-                "알바",
-                "인턴",
-                "근로",
-                "고용",
-            ],
+            "triggers": ["취업", "일자리", "구직", "채용", "알바", "인턴", "근로", "고용"],
             "keywords": ["%취업%", "%일자리%", "%구직%", "%고용%", "%채용%", "%근로%"],
         },
         "startup": {
@@ -101,11 +104,11 @@ def extract_intent_keywords(query: str) -> List[str]:
 
 
 # -------------------------------------------------
-# 4. MCP Tool: check_eligibility
+# 4. MCP Tool
 # -------------------------------------------------
 @mcp.tool(
     name="check_eligibility",
-    description="사용자가 상태를 입력하고 사용자의 상태에서 가장 관련성 높은 복지 제도를 추천합니다. 입력된 질문에서 나이, 성별, 지역 정보를 추출하여 가장 관련성 높은 서비스를 반환합니다.",
+    description="사용자의 나이, 성별, 지역, 질문을 기반으로 관련 복지 서비스를 추천합니다.",
 )
 async def check_eligibility(
     query_text: str,
@@ -116,68 +119,73 @@ async def check_eligibility(
 ) -> Dict[str, Any]:
 
     if db_pool is None:
-        await init_db_pool()
+        init_db_pool()
 
-    # 1. 쿼리 전처리
+    # -------------------------------------------------
+    # Query preprocessing
+    # -------------------------------------------------
     cleaned_query = re.sub(r"\d+살|\d+세|\d+", "", query_text).strip()
     if not cleaned_query:
         cleaned_query = query_text
 
-    query_embedding = str(model.encode(cleaned_query).tolist())
+    query_embedding = model.encode(cleaned_query).tolist()
     target_keywords = extract_intent_keywords(query_text)
 
-    # 2. 지역명 전처리
+    # 지역 패턴
     sido_pattern = f"%{sido[:2]}%" if sido and len(sido) >= 2 else "%"
 
     try:
-        # [핵심 수정] 서브쿼리(Subquery) 구조로 변경
-        # 안쪽(FROM 절 내부)에서 계산된 별명(Alias)들을 바깥쪽(Main Query)에서 안전하게 사용합니다.
-        query = """
-            SELECT * FROM (
-                SELECT 
-                    service_id, 
-                    service_name, 
-                    service_purpose, 
-                    apply_url,
-                    
-                    -- [점수 1] 벡터 유사도 계산
-                    (1 - (embedding <=> $1))::float AS vector_score,
-                    
-                    -- [점수 2] 의도(Intent) 매칭 보너스
-                    (CASE 
-                        WHEN service_name LIKE ANY($5::text[]) OR service_purpose LIKE ANY($5::text[]) THEN 0.5 
-                        ELSE 0 
-                    END)::float AS intent_bonus,
 
-                    -- [점수 3] 프로필(Profile) 매칭 보너스
-                    (
-                        (CASE 
-                            WHEN sido IS NULL OR sido = '' THEN 0.1   -- 전국 대상
-                            WHEN sido ILIKE $3 THEN 0.2               -- 내 지역 일치
-                            ELSE 0 
-                        END) +
-                        (CASE 
-                            WHEN gender IS NULL OR gender = 'ALL' THEN 0.05 -- 성별 무관
-                            WHEN gender = $4 THEN 0.1                       -- 성별 일치
-                            ELSE 0 
-                        END)
-                    )::float AS profile_bonus
-                    
-                FROM welfare_service
-                WHERE 
-                    -- 최소한의 자격 요건 (나이)
-                    (COALESCE(min_age, 0) <= $2 AND (max_age IS NULL OR max_age = 0 OR max_age >= $2))
-            ) AS sub_query
-            
-            -- [정렬] 이제 'vector_score'가 진짜 컬럼처럼 인식됩니다.
-            ORDER BY (vector_score + intent_bonus + profile_bonus) DESC
-            LIMIT 5;
+        query = """
+        SELECT * FROM (
+            SELECT 
+                service_id,
+                service_name,
+                service_purpose,
+                apply_url,
+
+                (1 - (embedding <=> $1))::float AS vector_score,
+
+                (CASE
+                    WHEN service_name LIKE ANY($5::text[])
+                    OR service_purpose LIKE ANY($5::text[])
+                    THEN 0.5
+                    ELSE 0
+                END)::float AS intent_bonus,
+
+                (
+                    (CASE
+                        WHEN sido IS NULL OR sido = '' THEN 0.1
+                        WHEN sido ILIKE $3 THEN 0.2
+                        ELSE 0
+                    END)
+                    +
+                    (CASE
+                        WHEN gender IS NULL OR gender = 'ALL' THEN 0.05
+                        WHEN gender = $4 THEN 0.1
+                        ELSE 0
+                    END)
+                )::float AS profile_bonus
+
+            FROM welfare_service
+
+            WHERE
+                (COALESCE(min_age,0) <= $2
+                AND (max_age IS NULL OR max_age = 0 OR max_age >= $2))
+        ) AS sub_query
+
+        ORDER BY (vector_score + intent_bonus + profile_bonus) DESC
+        LIMIT 5
         """
 
-        async with db_pool.acquire() as conn:
-            rows = await conn.fetch(
-                query, query_embedding, age, sido_pattern, gender, target_keywords
-            )
+        async with db_pool.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    query,
+                    (query_embedding, age, sido_pattern, gender, target_keywords),
+                )
+
+                rows = await cur.fetchall()
 
         services = [
             {
@@ -185,13 +193,15 @@ async def check_eligibility(
                 "name": r["service_name"],
                 "purpose": r["service_purpose"],
                 "url": r["apply_url"] if r["apply_url"] else "",
-                # 디버깅: 점수 구성 확인
                 "score_breakdown": {
                     "vector": round(r["vector_score"], 2),
                     "intent": round(r["intent_bonus"], 2),
                     "profile": round(r["profile_bonus"], 2),
                     "total": round(
-                        r["vector_score"] + r["intent_bonus"] + r["profile_bonus"], 2
+                        r["vector_score"]
+                        + r["intent_bonus"]
+                        + r["profile_bonus"],
+                        2,
                     ),
                 },
             }
@@ -200,7 +210,7 @@ async def check_eligibility(
 
         return {
             "count": len(services),
-            "search_strategy": "Broad Intent Search (Error Fixed)",
+            "search_strategy": "Semantic + Intent + Profile",
             "recommended_services": services,
         }
 
