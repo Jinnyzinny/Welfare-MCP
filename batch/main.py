@@ -1,14 +1,10 @@
 import json, os, sys, selectors, asyncio
-from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
-# 기존 파싱 함수들
 from fetch_page import fetch_page
-from parse.parse_target_info import parse_target_info
-from parse.parse_welfare_details import parse_welfare_details
-from parse.parse_region import parse_region
 from parse.clean_text import clean_text
 from field_mapping import FIELD_MAPPING
+from parse.get_embedding import get_embedding
 
 # 수정된 비동기 DB 연결 함수 (AsyncConnectionPool 사용 가정)
 from DB_Connection import get_db_pool, close_db_pool
@@ -16,17 +12,11 @@ from DB_Connection import get_db_pool, close_db_pool
 load_dotenv()
 
 JOB_NAME = os.getenv("JOB_NAME", "welfare_sync_job")
-MODEL_NAME = "jhgan/ko-sroberta-multitask"
 
 async def run_batch():
     batch_id = None
-    
-    # 1. 모델 로드
-    print(f"Loading Embedding Model ({MODEL_NAME})...")
-    model = SentenceTransformer(MODEL_NAME)
-    print("Model loaded successfully.")
 
-    # 2. DB 풀 가져오기
+    # 1. DB 풀 가져오기
     pool = await get_db_pool()
 
     try:
@@ -48,6 +38,7 @@ async def run_batch():
                 """, (JOB_NAME,))
                 row = await cur.fetchone()
                 
+                # Checkpoint가 있으면 이어서, 없으면 새로 시작
                 checkpoint = row[0] if row and row[0] else {"page": 1}
                 if isinstance(checkpoint, str):
                     checkpoint = json.loads(checkpoint)
@@ -78,30 +69,20 @@ async def run_batch():
 
                     for item in items:
                         row_data = {db_col: (item.get(api_key) or "") for api_key, db_col in FIELD_MAPPING.items()}
-                        
-                        sido, sigungu = parse_region(row_data.get("provider_name", ""))
+                        # 지원대상 텍스트 추출 및 정제
                         target_text = clean_text(row_data.get("support_target", ""))
                         target_texts.append(target_text)
 
-                        min_age, max_age, gender = parse_target_info(target_text)
-                        household_type, min_income, max_income = parse_welfare_details(row_data)
-
-                        row_data.update({
-                            "min_age": min_age, "max_age": max_age, "gender": gender,
-                            "sido": sido, "sigungu": sigungu, "household_type": household_type,
-                            "min_income": min_income, "max_income": max_income,
-                            "payload": json.dumps(item, ensure_ascii=False),
-                        })
+                        row_data["payload"] = json.dumps(item, ensure_ascii=False)
                         parsed_rows.append(row_data)
 
                     # [Batch Embedding]
-                    if target_texts:
-                        embeddings = model.encode(target_texts).tolist()
-                        for row, emb in zip(parsed_rows, embeddings):
-                            row["embedding"] = emb
+                    for row, target_text in zip(parsed_rows, target_texts):
+                        row["embedding"] = get_embedding(target_text)
 
-                    # [INSERT 실행] executemany 대신 개별 execute 사용 시 await 필수
+                    # [INSERT 실행]
                     for row in parsed_rows:
+                        # 1) welfare_service: 원본 텍스트 + embedding 보관
                         await cur.execute("""
                             INSERT INTO welfare_service (
                                 service_id, support_type, service_name, service_purpose,
@@ -109,21 +90,61 @@ async def run_batch():
                                 apply_method, required_documents, apply_org_name, contact_info,
                                 apply_url, last_modified_time, provider_name, admin_rule, local_rule,
                                 law_basis, official_required_documents, personal_verification_required_documents,
-                                min_age, max_age, gender, sido, sigungu, household_type, 
-                                min_income, max_income, payload, embedding
+                                payload, embedding
                             ) VALUES (
                                 %(service_id)s, %(support_type)s, %(service_name)s, %(service_purpose)s,
                                 %(apply_deadline)s, %(support_target)s, %(selection_criteria)s,
                                 %(apply_method)s, %(required_documents)s, %(apply_org_name)s, %(contact_info)s,
                                 %(apply_url)s, %(last_modified_time)s, %(provider_name)s, %(admin_rule)s, %(local_rule)s,
                                 %(law_basis)s, %(official_required_documents)s, %(personal_verification_required_documents)s,
-                                %(min_age)s, %(max_age)s, %(gender)s, %(sido)s, %(sigungu)s, %(household_type)s,
-                                %(min_income)s, %(max_income)s, %(payload)s::jsonb, %(embedding)s
+                                %(payload)s::jsonb, %(embedding)s
                             ) ON CONFLICT (service_id) DO UPDATE SET
-                                service_name = EXCLUDED.service_name,
-                                updated_at = NOW(),
-                                embedding = EXCLUDED.embedding
-                                -- (기타 필드 생략, 실제 코드에선 다 넣으세요)
+                                service_name        = EXCLUDED.service_name,
+                                service_purpose     = EXCLUDED.service_purpose,
+                                support_target      = EXCLUDED.support_target,
+                                selection_criteria  = EXCLUDED.selection_criteria,
+                                last_modified_time  = EXCLUDED.last_modified_time,
+                                payload             = EXCLUDED.payload,
+                                embedding           = EXCLUDED.embedding,
+                                updated_at          = NOW()
+                        """, row)
+
+                        # 2) welfare_target: 지원 대상 정규화
+                        await cur.execute("""
+                            INSERT INTO welfare_target (
+                                service_id, min_age, max_age, gender,
+                                sido, sigungu,
+                                household_types, employment_statuses, special_conditions
+                            ) VALUES (
+                                %(service_id)s, %(min_age)s, %(max_age)s, %(gender)s,
+                                %(sido)s, %(sigungu)s,
+                                %(household_types)s, %(employment_statuses)s, %(special_conditions)s
+                            ) ON CONFLICT (service_id) DO UPDATE SET
+                                min_age              = EXCLUDED.min_age,
+                                max_age              = EXCLUDED.max_age,
+                                gender               = EXCLUDED.gender,
+                                sido                 = EXCLUDED.sido,
+                                sigungu              = EXCLUDED.sigungu,
+                                household_types      = EXCLUDED.household_types,
+                                employment_statuses  = EXCLUDED.employment_statuses,
+                                special_conditions   = EXCLUDED.special_conditions
+                        """, row)
+
+                        # 3) welfare_criteria: 선정 기준 정규화
+                        await cur.execute("""
+                            INSERT INTO welfare_criteria (
+                                service_id,
+                                income_min_pct, income_max_pct,
+                                asset_limit_krw, other_conditions
+                            ) VALUES (
+                                %(service_id)s,
+                                %(income_min_pct)s, %(income_max_pct)s,
+                                %(asset_limit_krw)s, %(other_conditions)s
+                            ) ON CONFLICT (service_id) DO UPDATE SET
+                                income_min_pct  = EXCLUDED.income_min_pct,
+                                income_max_pct  = EXCLUDED.income_max_pct,
+                                asset_limit_krw = EXCLUDED.asset_limit_krw,
+                                other_conditions = EXCLUDED.other_conditions
                         """, row)
 
                     # 페이지 업데이트 및 커밋
@@ -145,7 +166,7 @@ async def run_batch():
     except Exception as e:
         print(f"Batch Failed: {e}")
         if conn:
-            await conn.rollback()  # 👈 일단 에러 난 트랜잭션은 롤백해서 깨끗하게 만듦
+            await conn.rollback()  # 에러 난 트랜잭션은 롤백해서 깨끗하게 만듦
         
         if batch_id:
             # 새 트랜잭션으로 상태 업데이트
