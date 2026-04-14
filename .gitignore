@@ -47,5 +47,7 @@ out/
 /nbdist/
 /.nb-gradle/
 
+*/migration_v1_normalize_eligibility.sql
+
 ### VS Code ###
 .vscode/

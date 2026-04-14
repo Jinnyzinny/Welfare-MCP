@@ -109,43 +109,6 @@ async def run_batch():
                                 updated_at          = NOW()
                         """, row)
 
-                        # 2) welfare_target: 지원 대상 정규화
-                        await cur.execute("""
-                            INSERT INTO welfare_target (
-                                service_id, min_age, max_age, gender,
-                                sido, sigungu,
-                                household_types, employment_statuses, special_conditions
-                            ) VALUES (
-                                %(service_id)s, %(min_age)s, %(max_age)s, %(gender)s,
-                                %(sido)s, %(sigungu)s,
-                                %(household_types)s, %(employment_statuses)s, %(special_conditions)s
-                            ) ON CONFLICT (service_id) DO UPDATE SET
-                                min_age              = EXCLUDED.min_age,
-                                max_age              = EXCLUDED.max_age,
-                                gender               = EXCLUDED.gender,
-                                sido                 = EXCLUDED.sido,
-                                sigungu              = EXCLUDED.sigungu,
-                                household_types      = EXCLUDED.household_types,
-                                employment_statuses  = EXCLUDED.employment_statuses,
-                                special_conditions   = EXCLUDED.special_conditions
-                        """, row)
-
-                        # 3) welfare_criteria: 선정 기준 정규화
-                        await cur.execute("""
-                            INSERT INTO welfare_criteria (
-                                service_id,
-                                income_min_pct, income_max_pct,
-                                asset_limit_krw, other_conditions
-                            ) VALUES (
-                                %(service_id)s,
-                                %(income_min_pct)s, %(income_max_pct)s,
-                                %(asset_limit_krw)s, %(other_conditions)s
-                            ) ON CONFLICT (service_id) DO UPDATE SET
-                                income_min_pct  = EXCLUDED.income_min_pct,
-                                income_max_pct  = EXCLUDED.income_max_pct,
-                                asset_limit_krw = EXCLUDED.asset_limit_krw,
-                                other_conditions = EXCLUDED.other_conditions
-                        """, row)
 
                     # 페이지 업데이트 및 커밋
                     current_page += 1
