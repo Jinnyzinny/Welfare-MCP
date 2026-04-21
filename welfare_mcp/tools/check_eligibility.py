@@ -44,8 +44,8 @@ def init_db_pool():
         if db_pool is not None:
             return
 
-        db_host = os.getenv("DB_HOST", "postgres")
-        db_port = int(os.getenv("DB_PORT", "5432"))
+        db_host = os.getenv("DB_HOST")
+        db_port = int(os.getenv("DB_PORT"))
         db_name = os.getenv("DB_NAME")
         db_user = os.getenv("DB_USERNAME")
         db_pass = os.getenv("DB_PASSWORD")

@@ -1,0 +1,4 @@
+anthropic
+psycopg[binary]
+psycopg-pool
+python-dotenv
