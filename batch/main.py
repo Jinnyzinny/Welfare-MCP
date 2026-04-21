@@ -154,3 +154,6 @@ if __name__ == "__main__":
     else:
         # 리눅스 등 기타 환경에서는 기본 루프 사용
         asyncio.run(run_batch())
+    
+    # 2. 수집 완료 후 정규화 (동기 함수라 그냥 호출)
+    normalize_run(force=False)
