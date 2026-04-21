@@ -104,7 +104,7 @@ def extract_intent_keywords(query: str) -> List[str]:
 # -------------------------------------------------
 @mcp.tool(
     name="check_eligibility",
-    description="사용자의 나이, 성별, 지역, 질문을 기반으로 복지 서비스를 추천합니다",
+    description="사용자의 나이, 성별, 지역, 가구형태, 소득수준, 질문을 기반으로 복지 서비스를 추천합니다",
 )
 async def check_eligibility(
     query_text: str,
@@ -112,8 +112,19 @@ async def check_eligibility(
     gender: Literal["MALE", "FEMALE", "ALL"] = "ALL",
     sido: str | None = None,
     sigungu: str | None = None,
+    household_type: str | None = None,
+    income_pct: int | None = None,
 ) -> Dict[str, Any]:
-
+    """
+    Args:
+        query_text    : 자연어 검색어
+        age           : 사용자 나이
+        gender        : MALE | FEMALE | ALL
+        sido          : 시/도 (예: 서울특별시)
+        sigungu       : 시/군/구 (예: 강남구)
+        household_type: 가구 형태 태그 (예: 한부모, 다자녀, 1인가구)
+        income_pct    : 중위소득 % (예: 50 → 중위소득 50%)
+    """
     if db_pool is None:
         init_db_pool()
 
@@ -124,7 +135,6 @@ async def check_eligibility(
     # Query 정리
     # -----------------------------
     cleaned_query = re.sub(r"\d+살|\d+세|\d+", "", query_text).strip()
-
     if not cleaned_query:
         cleaned_query = query_text
 
@@ -137,45 +147,67 @@ async def check_eligibility(
     target_keywords = extract_intent_keywords(query_text)
 
     sido_pattern = f"%{sido[:2]}%" if sido else "%"
+    # gender: DB는 A/M/F, tool 파라미터는 ALL/MALE/FEMALE
+    gender_db = {"MALE": "M", "FEMALE": "F", "ALL": "A"}.get(gender, "A")
 
     try:
-
         sql = """
         SELECT * FROM (
-            SELECT 
-                service_id,
-                service_name,
-                service_purpose,
-                apply_url,
+            SELECT
+                ws.service_id,
+                ws.service_name,
+                ws.service_purpose,
+                ws.apply_url,
 
-                (1 - (embedding <=> %s::vector))::float AS vector_score,
+                (1 - (ws.embedding <=> %s::vector))::float AS vector_score,
 
                 (CASE
-                    WHEN service_name LIKE ANY(%s)
-                    OR service_purpose LIKE ANY(%s)
+                    WHEN ws.service_name    LIKE ANY(%s)
+                    OR   ws.service_purpose LIKE ANY(%s)
                     THEN 0.5
                     ELSE 0
                 END)::float AS intent_bonus,
 
                 (
+                    -- 지역 보너스
                     (CASE
-                        WHEN sido IS NULL OR sido = '' THEN 0.1
-                        WHEN sido ILIKE %s THEN 0.2
+                        WHEN wt.sido IS NULL OR wt.sido = '' THEN 0.1
+                        WHEN wt.sido ILIKE %s               THEN 0.2
                         ELSE 0
                     END)
                     +
+                    -- 성별 보너스
                     (CASE
-                        WHEN gender IS NULL OR gender = 'ALL' THEN 0.05
-                        WHEN gender = %s THEN 0.1
+                        WHEN wt.gender = 'A'  THEN 0.05
+                        WHEN wt.gender = %s   THEN 0.1
+                        ELSE 0
+                    END)
+                    +
+                    -- 가구 형태 보너스
+                    (CASE
+                        WHEN %s IS NOT NULL
+                         AND wt.household_types @> ARRAY[%s]::TEXT[]
+                        THEN 0.15
+                        ELSE 0
+                    END)
+                    +
+                    -- 소득 기준 보너스
+                    (CASE
+                        WHEN %s IS NOT NULL
+                         AND wc.income_min_pct <= %s
+                         AND wc.income_max_pct >= %s
+                        THEN 0.15
                         ELSE 0
                     END)
                 )::float AS profile_bonus
 
-            FROM welfare_service
+            FROM welfare_service   ws
+            JOIN welfare_target    wt ON wt.service_id = ws.service_id
+            JOIN welfare_criteria  wc ON wc.service_id = ws.service_id
 
             WHERE
-                COALESCE(min_age,0) <= %s
-                AND (max_age IS NULL OR max_age = 0 OR max_age >= %s)
+                wt.min_age <= %s
+                AND (wt.max_age = 0 OR wt.max_age >= %s)
 
         ) sub
 
@@ -185,20 +217,23 @@ async def check_eligibility(
 
         async with db_pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
-
                 await cur.execute(
                     sql,
                     (
-                        query_embedding,
-                        target_keywords,
-                        target_keywords,
-                        sido_pattern,
-                        gender,
-                        age,
-                        age,
+                        query_embedding,            # embedding
+                        target_keywords,            # service_name LIKE ANY
+                        target_keywords,            # service_purpose LIKE ANY
+                        sido_pattern,               # sido ILIKE
+                        gender_db,                  # gender =
+                        household_type,             # 가구 형태 보너스 조건 체크
+                        household_type,             # household_types @> ARRAY[?]
+                        income_pct,                 # 소득 보너스 조건 체크
+                        income_pct if income_pct else 0,   # income_min_pct <=
+                        income_pct if income_pct else 999, # income_max_pct >=
+                        age,                        # min_age <=
+                        age,                        # max_age >=
                     ),
                 )
-
                 rows = await cur.fetchall()
 
         services = [
@@ -212,10 +247,7 @@ async def check_eligibility(
                     "intent": round(r["intent_bonus"], 2),
                     "profile": round(r["profile_bonus"], 2),
                     "total": round(
-                        r["vector_score"]
-                        + r["intent_bonus"]
-                        + r["profile_bonus"],
-                        2,
+                        r["vector_score"] + r["intent_bonus"] + r["profile_bonus"], 2
                     ),
                 },
             }
