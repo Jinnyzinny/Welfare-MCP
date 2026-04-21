@@ -238,7 +238,7 @@ def submit_and_wait(client: anthropic.Anthropic, requests: list[Request]):
         batch = client.messages.batches.retrieve(batch.id)
         rc = batch.request_counts
         total = rc.processing + rc.succeeded + rc.errored + rc.canceled + rc.expired
-        print(f"  진행 중… 성공: {rc.succeeded} / 오류: {rc.errored} / 전체: {total}")
+        print(f"  진행 중… 성공: {rc.succeeded} / 오류: {rc.errored} / 전체: {total}",flush=True)
 
     return batch
 
