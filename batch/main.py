@@ -6,6 +6,8 @@ from parse.clean_text import clean_text
 from field_mapping import FIELD_MAPPING
 from parse.get_embedding import get_embedding
 
+from normalize_with_claude import run as normalize_run
+
 # 수정된 비동기 DB 연결 함수 (AsyncConnectionPool 사용 가정)
 from DB_Connection import get_db_pool, close_db_pool
 
@@ -154,6 +156,6 @@ if __name__ == "__main__":
     else:
         # 리눅스 등 기타 환경에서는 기본 루프 사용
         asyncio.run(run_batch())
-    
+    print(f"batch 작업 완료 정규화 작업 시작")
     # 2. 수집 완료 후 정규화 (동기 함수라 그냥 호출)
     normalize_run(force=False)
