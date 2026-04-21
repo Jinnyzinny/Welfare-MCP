@@ -11,7 +11,6 @@ welfare_target / welfare_criteria 테이블에 저장합니다.
 import argparse
 import json
 import os
-import sys
 import time
 
 import anthropic
@@ -23,7 +22,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── 설정 ──────────────────────────────────────────────────────────────────────
-MODEL            = "claude-haiku-4-5"   # 비용 절감 시 "claude-haiku-4-5" 로 교체 가능
+MODEL            = "claude-haiku-4-5-20251001"   # 비용 절감 시 "claude-haiku-4-5" 로 교체 가능
 BATCH_CHUNK_SIZE = 10_000              # 배치당 최대 요청 수 (API 상한: 100,000)
 POLL_INTERVAL    = 60                  # 완료 폴링 주기 (초)
 
@@ -229,7 +228,7 @@ def upsert_results(conn, results: list[dict]) -> None:
 
 # ── 배치 제출 & 폴링 ───────────────────────────────────────────────────────────
 
-def submit_and_wait(client: anthropic.Anthropic, requests: list[Request]) -> anthropic.types.Batch:
+def submit_and_wait(client: anthropic.Anthropic, requests: list[Request]) -> anthropic.types.MessageBatch:
     """배치 제출 후 완료까지 폴링"""
     batch = client.messages.batches.create(requests=requests)
     print(f"  Batch ID: {batch.id} | 상태: {batch.processing_status}")
