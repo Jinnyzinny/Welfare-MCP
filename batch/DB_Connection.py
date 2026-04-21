@@ -17,7 +17,7 @@ DATABASE_PRIVATE_URL = os.getenv("DATABASE_PRIVATE_URL")  # URL이 있다면 이
 
 def get_conninfo():
     """공식 문서(libpq) 키워드를 활용한 연결 문자열 생성"""
-    print(f"[DEBUG] DATABASE_PRIVATE_URL: {DATABASE_PRIVATE_URL}")
+    # print(f"[DEBUG] DATABASE_PRIVATE_URL: {DATABASE_PRIVATE_URL}")
     if DATABASE_PRIVATE_URL:
         return DATABASE_PRIVATE_URL
     return f"host={DB_HOST} port={DB_PORT} dbname={DB_NAME} user={DB_USERNAME} password={DB_PASSWORD}"
