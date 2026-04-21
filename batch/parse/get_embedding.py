@@ -1,6 +1,5 @@
 # parse/get_embedding.py
 from sentence_transformers import SentenceTransformer
-import numpy as np
 
 # 모델 로드 (최초 실행 시 약 400MB 모델 파일을 자동으로 다운로드합니다)
 # 768 차원을 생성하는 한국어 최적화 모델입니다.
