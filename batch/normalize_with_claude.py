@@ -228,7 +228,7 @@ def upsert_results(conn, results: list[dict]) -> None:
 
 # ── 배치 제출 & 폴링 ───────────────────────────────────────────────────────────
 
-def submit_and_wait(client: anthropic.Anthropic, requests: list[Request]) -> anthropic.types.MessageBatch:
+def submit_and_wait(client: anthropic.Anthropic, requests: list[Request]):
     """배치 제출 후 완료까지 폴링"""
     batch = client.messages.batches.create(requests=requests)
     print(f"  Batch ID: {batch.id} | 상태: {batch.processing_status}")
