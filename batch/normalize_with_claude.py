@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── 설정 ──────────────────────────────────────────────────────────────────────
-MODEL            = "claude-opus-4-6"   # 비용 절감 시 "claude-haiku-4-5" 로 교체 가능
+MODEL            = "claude-haiku-4-5"   # 비용 절감 시 "claude-haiku-4-5" 로 교체 가능
 BATCH_CHUNK_SIZE = 10_000              # 배치당 최대 요청 수 (API 상한: 100,000)
 POLL_INTERVAL    = 60                  # 완료 폴링 주기 (초)
 
