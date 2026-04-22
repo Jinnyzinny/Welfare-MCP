@@ -157,7 +157,7 @@ if __name__ == "__main__":
     print(f"batch 작업 완료 정규화 작업 시작",flush=True)
     # 2. 수집 완료 후 정규화 (동기 함수라 그냥 호출)
     try:
-        from normalize_with_claude import run as normalize_run
+        from normalize.normalize_with_claude import run as normalize_run
         normalize_run(force=False)
     except Exception as e:
         print(f"정규화 실패: {e}", flush=True)
