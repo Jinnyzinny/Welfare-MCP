@@ -9,6 +9,9 @@ from parse.get_embedding import get_embedding
 # 수정된 비동기 DB 연결 함수 (AsyncConnectionPool 사용 가정)
 from DB_Connection import get_db_pool, close_db_pool
 
+from logging import getLogger, StreamHandler, Formatter
+logger = getLogger(__name__)
+
 load_dotenv()
 
 JOB_NAME = os.getenv("JOB_NAME", "welfare_sync_job")
@@ -18,7 +21,7 @@ async def run_batch():
 
     # 1. DB 풀 가져오기
     pool = await get_db_pool()
-
+    logger.info(f"[INFO] DB Pool acquired successfully")
     try:
         # 비동기 커넥션 빌리기
         async with pool.connection() as conn:
@@ -26,8 +29,11 @@ async def run_batch():
                 # [Advisory Lock] 비동기 실행
                 await cur.execute("select pg_try_advisory_lock(hashtext(%s))", (JOB_NAME,))
                 lock_result = await cur.fetchone()
+                # lock_result[0]이 True면 락 획득 성공, False면 이미 다른 프로세스가 락을 가지고 있음
+                logger.info(f"[INFO] Advisory lock successful: {lock_result[0]}")
+
                 if not lock_result[0]:
-                    print("Another batch is running. Exit.")
+                    logger.info("[INFO] Another batch is running. Exit.")
                     return
 
                 # [Checkpoint 확인]
@@ -54,14 +60,14 @@ async def run_batch():
                 current_page = checkpoint.get("page", 1)
 
                 while True:
-                    print(f"Fetching page {current_page}...")
+                    logger.info(f"[INFO] Fetching page {current_page}...")
                     # fetch_page가 동기 함수라면 그대로 쓰고, 비동기라면 await를 붙이세요.
                     data = fetch_page(current_page) 
                     items = data.get("data", [])
                     
-                    print(data["currentCount"], "items fetched.")
+                    logger.info(f"[INFO] {data['currentCount']} items fetched.")
                     if not items or data["currentCount"] == 0:
-                        print("No more data. Batch finished.")
+                        logger.info("[INFO] No more data. Batch finished.")
                         break
 
                     target_texts = []
@@ -117,7 +123,7 @@ async def run_batch():
                         (json.dumps({"page": current_page}), batch_id),
                     )
                     await conn.commit()
-                    print(f"Page {current_page - 1} saved.")
+                    logger.info(f"[INFO] Page {current_page - 1} saved.")
 
                 # 최종 성공 처리
                 await cur.execute(
@@ -127,9 +133,10 @@ async def run_batch():
                 await conn.commit()
 
     except Exception as e:
-        print(f"Batch Failed: {e}")
+        logger.error(f"[ERROR] Batch Failed: {e}")
         if conn:
             await conn.rollback()  # 에러 난 트랜잭션은 롤백해서 깨끗하게 만듦
+            logger.error(f"[ERROR] Transaction rolled back due to error.")
         
         if batch_id:
             # 새 트랜잭션으로 상태 업데이트
@@ -154,11 +161,11 @@ if __name__ == "__main__":
     else:
         # 리눅스 등 기타 환경에서는 기본 루프 사용
         asyncio.run(run_batch())
-    print(f"batch 작업 완료 정규화 작업 시작",flush=True)
+    logger.info(f"[INFO] batch 작업 완료 정규화 작업 시작")
     # 2. 수집 완료 후 정규화 (동기 함수라 그냥 호출)
     try:
         from normalize.normalize_with_claude import run as normalize_run
         normalize_run(force=False)
     except Exception as e:
-        print(f"정규화 실패: {e}", flush=True)
+        logger.error(f"[ERROR] 정규화 실패: {e}")
         raise
