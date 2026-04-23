@@ -5,7 +5,7 @@ from typing import List, Literal, Dict, Any
 from mcp_container import mcp
 
 logger = logging.getLogger(__name__)
-from welfare_mcp.backend.DB_Connection import get_db_pool, close_db_pool
+from backend.DB_Connection import get_db_pool, close_db_pool
 
 # -------------------------------------------------
 # DB Connection

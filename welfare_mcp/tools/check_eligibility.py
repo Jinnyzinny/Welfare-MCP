@@ -7,7 +7,7 @@ from psycopg.rows import dict_row
 from sentence_transformers import SentenceTransformer
 
 from mcp_container import mcp
-from welfare_mcp.backend.repository.check_eligibility import check_eligibility_query
+from backend.repository.check_eligibility import check_eligibility_query
 
 # -------------------------------------------------
 # Thread 제한
