@@ -183,6 +183,10 @@ async def check_eligibility(
         }
     
     # 예외 처리 (쿼리 실행, 데이터 처리 등에서 발생할 수 있는 모든 예외를 포괄)
+    except TimeoutError as e:
+        logger.error(f"⏰ [ERROR] DB Query Timeout: {e}")
+        return {"error": "DB 쿼리 실행이 시간 초과되었습니다."} 
+
     except Exception as e:
         logger.error(f"❌ Eligibility Error: {e}")
         return {"error": str(e)}
