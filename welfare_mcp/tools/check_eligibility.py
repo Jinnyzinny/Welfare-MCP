@@ -32,7 +32,7 @@ logger.info("✅ Model loaded")
 # -------------------------------------------------
 # DB Pool
 # -------------------------------------------------
-from welfare_mcp.backend.DB_Connection import get_db_pool, close_db_pool
+from backend.DB_Connection import get_db_pool, close_db_pool
 
 # -------------------------------------------------
 # Intent Keyword 추출
