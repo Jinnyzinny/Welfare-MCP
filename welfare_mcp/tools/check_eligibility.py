@@ -1,14 +1,13 @@
 import logging
 import os
-import re
-import threading
 from typing import Literal, List, Dict, Any
+import re
 import torch
-from psycopg_pool import AsyncConnectionPool
 from psycopg.rows import dict_row
 from sentence_transformers import SentenceTransformer
 
 from mcp_container import mcp
+from welfare_mcp.backend.repository.check_eligibility import check_eligibility_query
 
 # -------------------------------------------------
 # Thread 제한
@@ -24,7 +23,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # -------------------------------------------------
-# Embedding 모델
+# Embedding 모델 (결국 벡터 임베딩이 되더라도 MCP 서버에서는 그걸 해석해야 함)
 # -------------------------------------------------
 logger.info("📡 Loading Embedding Model...")
 model = SentenceTransformer("jhgan/ko-sroberta-multitask")
@@ -33,34 +32,7 @@ logger.info("✅ Model loaded")
 # -------------------------------------------------
 # DB Pool
 # -------------------------------------------------
-db_pool: AsyncConnectionPool | None = None
-_init_lock = threading.Lock()
-
-
-def init_db_pool():
-    global db_pool
-
-    with _init_lock:
-        if db_pool is not None:
-            return
-
-        db_host = os.getenv("DB_HOST")
-        db_port = int(os.getenv("DB_PORT"))
-        db_name = os.getenv("DB_NAME")
-        db_user = os.getenv("DB_USERNAME")
-        db_pass = os.getenv("DB_PASSWORD")
-
-        logger.info(f"🚀 Connecting DB {db_host}:{db_port}")
-
-        db_pool = AsyncConnectionPool(
-            conninfo=f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}",
-            min_size=1,
-            max_size=3,
-            open=False,
-        )
-
-        logger.info("✅ DB Pool Ready")
-
+from welfare_mcp.backend.DB_Connection import get_db_pool, close_db_pool
 
 # -------------------------------------------------
 # Intent Keyword 추출
@@ -125,22 +97,29 @@ async def check_eligibility(
         household_type: 가구 형태 태그 (예: 한부모, 다자녀, 1인가구)
         income_pct    : 중위소득 % (예: 50 → 중위소득 50%)
     """
-    if db_pool is None:
-        init_db_pool()
+    # mcp 함수 호출 시점 로그
+    logger.info(f"[INFO] check_eligibility function called")
 
-    if db_pool.closed:
-        await db_pool.open()
+    # DB 연결 풀 초기화 (최초 1회, 이후 재사용)
+    try:
+        db_pool = await get_db_pool()
 
-    # -----------------------------
-    # Query 정리
-    # -----------------------------
+    except Exception as e:
+        logger.error(f"❌ [ERROR] DB Pool Error: {e}")
+        return {"error": "DB 연결에 실패했습니다."}
+
+    logger.info(f"[INFO] DB Pool acquired successfully")
+
+    # # -----------------------------
+    # # Query 정리
+    # # -----------------------------
     cleaned_query = re.sub(r"\d+살|\d+세|\d+", "", query_text).strip()
     if not cleaned_query:
         cleaned_query = query_text
 
-    # -----------------------------
-    # embedding → vector 문자열
-    # -----------------------------
+    # # -----------------------------
+    # # embedding → vector 문자열
+    # # -----------------------------
     embedding = model.encode(cleaned_query).tolist()
     query_embedding = "[" + ",".join(map(str, embedding)) + "]"
 
@@ -151,70 +130,11 @@ async def check_eligibility(
     gender_db = {"MALE": "M", "FEMALE": "F", "ALL": "A"}.get(gender, "A")
 
     try:
-        sql = """
-        SELECT * FROM (
-            SELECT
-                ws.service_id,
-                ws.service_name,
-                ws.service_purpose,
-                ws.apply_url,
-
-                (1 - (ws.embedding <=> %s::vector))::float AS vector_score,
-
-                (CASE
-                    WHEN ws.service_name    LIKE ANY(%s)
-                    OR   ws.service_purpose LIKE ANY(%s)
-                    THEN 0.5
-                    ELSE 0
-                END)::float AS intent_bonus,
-
-                (
-                    -- 지역 보너스
-                    (CASE
-                        WHEN wt.sido IS NULL OR wt.sido = '' THEN 0.1
-                        WHEN wt.sido ILIKE %s               THEN 0.2
-                        ELSE 0
-                    END)
-                    +
-                    -- 성별 보너스
-                    (CASE
-                        WHEN wt.gender = 'A'  THEN 0.05
-                        WHEN wt.gender = %s   THEN 0.1
-                        ELSE 0
-                    END)
-                    +
-                    -- 가구 형태 보너스
-                    (CASE
-                        WHEN %s IS NOT NULL
-                         AND wt.household_types @> ARRAY[%s]::TEXT[]
-                        THEN 0.15
-                        ELSE 0
-                    END)
-                    +
-                    -- 소득 기준 보너스
-                    (CASE
-                        WHEN %s IS NOT NULL
-                         AND wc.income_min_pct <= %s
-                         AND wc.income_max_pct >= %s
-                        THEN 0.15
-                        ELSE 0
-                    END)
-                )::float AS profile_bonus
-
-            FROM welfare_service   ws
-            JOIN welfare_target    wt ON wt.service_id = ws.service_id
-            JOIN welfare_criteria  wc ON wc.service_id = ws.service_id
-
-            WHERE
-                wt.min_age <= %s
-                AND (wt.max_age = 0 OR wt.max_age >= %s)
-
-        ) sub
-
-        ORDER BY (vector_score + intent_bonus + profile_bonus) DESC
-        LIMIT 5
-        """
-
+        # # -----------------------------
+        # 쿼리 실행문이 너무 길어서 파일 별도 분리 -> backend/repository/check_eligibility.py
+        # 향후 alchemy 같은 ORM 도입 시 repository 레이어에서 쿼리 관리하는 형태로 수정 가능
+        # # -----------------------------
+        sql = check_eligibility_query()
         async with db_pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(
@@ -235,7 +155,8 @@ async def check_eligibility(
                     ),
                 )
                 rows = await cur.fetchall()
-
+                
+        # 서비스별 점수 계산 및 정렬
         services = [
             {
                 "service_id": r["service_id"],
@@ -254,12 +175,17 @@ async def check_eligibility(
             for r in rows
         ]
 
+        # 최종 결과 반환
         return {
             "count": len(services),
             "search_strategy": "Semantic + Intent + Profile",
             "recommended_services": services,
         }
-
+    
+    # 예외 처리 (쿼리 실행, 데이터 처리 등에서 발생할 수 있는 모든 예외를 포괄)
     except Exception as e:
         logger.error(f"❌ Eligibility Error: {e}")
         return {"error": str(e)}
+
+    finally:
+        await close_db_pool()

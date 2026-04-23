@@ -1,49 +1,18 @@
 import logging
 import threading
-import psycopg
-from psycopg_pool import ConnectionPool
-import os
 import re
 from typing import List, Literal, Dict, Any
 from mcp_container import mcp
 
 logger = logging.getLogger(__name__)
+from welfare_mcp.backend.DB_Connection import get_db_pool, close_db_pool
 
 # -------------------------------------------------
 # DB Connection
 # -------------------------------------------------
-db_pool: ConnectionPool | None = None
-_init_lock = threading.Lock()
+# db_pool: ConnectionPool | None = None
+# _init_lock = threading.Lock()
 sem = threading.Semaphore(1)
-
-
-def init_db_pool():
-    global db_pool
-    with _init_lock:
-        if db_pool is not None:
-            return
-        try:
-            db_host = os.getenv("DB_HOST", "postgres")
-            db_port = int(os.getenv("DB_PORT", "5432"))
-            db_name = os.getenv("DB_NAME")
-            db_user = os.getenv("DB_USERNAME")
-            db_pass = os.getenv("DB_PASSWORD")
-
-            # Lightsail 2GB 환경 고려: 최소 연결 유지
-            db_pool = ConnectionPool(
-                host=db_host,
-                port=db_port,
-                database=db_name,
-                user=db_user,
-                password=db_pass,
-                min_size=1,
-                max_size=2,
-                timeout=10.0,
-            )
-            logger.info("✅ DB Pool initialized in required_documents.")
-        except Exception as e:
-            logger.error(f"❌ DB Init Error: {e}")
-            raise
 
 
 # -------------------------------------------------
@@ -53,7 +22,7 @@ def init_db_pool():
     name="required_documents",
     description="선택한 서비스 ID의 실제 구비서류 목록을 DB에서 조회합니다.",
 )
-def required_documents(
+async def required_documents(
     service_id: str,
     age_group: Literal["YOUTH", "ADULT", "SENIOR"] = "ADULT",
     employment_status: Literal[
@@ -68,12 +37,17 @@ def required_documents(
     ] = "UNKNOWN",
 ) -> Dict[str, Any]:
 
-    if db_pool is None:
-        init_db_pool()
+    # DB 연결 풀 초기화 (최초 1회, 이후 재사용)
+    try:
+        db_pool = await get_db_pool()
+    except Exception as e:
+        logger.error(f"❌ DB Pool Error: {e}")
+        return {"error": "DB 연결에 실패했습니다."}
 
+    # 쓰레드 안정성을 위해 세마포어로 동시 접근 제어
     with sem:
         try:
-            # [최종 수정] 사용자님이 확인해주신 정확한 컬럼명 적용
+            # 사용자님이 확인해주신 정확한 컬럼명 적용
             query = """
                 SELECT
                     service_name,
@@ -85,6 +59,7 @@ def required_documents(
                 WHERE service_id = $1
             """
 
+            # DB에서 서비스 ID에 해당하는 행을 가져옴
             with db_pool.acquire(timeout=10.0) as conn:
                 row = conn.fetchrow(query, service_id)
 
@@ -140,12 +115,12 @@ def required_documents(
                 "status": "success",
             }
 
-        except psycopg.UndefinedColumnError as e:
+        except db_pool.UndefinedColumnError as e:
             # 혹시라도 또 오타가 있을 경우를 대비한 로그
             logger.error(f"❌ Column Name Error: {e}")
             return {"error": f"DB 컬럼명 불일치: {str(e)}"}
 
-        except psycopg.TimeoutError:
+        except db_pool.TimeoutError:
             return {
                 "error": "요청이 너무 많아 지연되고 있습니다. 잠시 후 다시 시도해주세요."
             }
@@ -153,3 +128,8 @@ def required_documents(
         except Exception as e:
             logger.error(f"❌ Required Documents Error: {e}")
             return {"error": f"조회 중 오류 발생: {str(e)}"}
+        
+    try:
+        await close_db_pool()
+    except Exception as e:
+        logger.error(f"❌ DB Pool Close Error: {e}")    
