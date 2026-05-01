@@ -7,7 +7,7 @@ from psycopg.rows import dict_row
 from sentence_transformers import SentenceTransformer
 
 from mcp_container import mcp
-from backend.repository.check_eligibility import check_eligibility_query
+from backend.repository.check_eligibility import score_eligibility_query
 
 # -------------------------------------------------
 # Thread 제한
@@ -86,6 +86,8 @@ async def check_eligibility(
     sigungu: str | None = None,
     household_type: str | None = None,
     income_pct: int | None = None,
+    employment_statuses: List[str] | None = None,
+    special_condition: List[str] | None = None,
 ) -> Dict[str, Any]:
     """
     Args:
@@ -134,24 +136,31 @@ async def check_eligibility(
         # 쿼리 실행문이 너무 길어서 파일 별도 분리 -> backend/repository/check_eligibility.py
         # 향후 alchemy 같은 ORM 도입 시 repository 레이어에서 쿼리 관리하는 형태로 수정 가능
         # # -----------------------------
-        sql = check_eligibility_query()
+        sql = score_eligibility_query()
         async with db_pool.connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(
                     sql,
                     (
-                        query_embedding,            # embedding
-                        target_keywords,            # service_name LIKE ANY
-                        target_keywords,            # service_purpose LIKE ANY
-                        sido_pattern,               # sido ILIKE
-                        gender_db,                  # gender =
-                        household_type,             # 가구 형태 보너스 조건 체크
-                        household_type,             # household_types @> ARRAY[?]
-                        income_pct,                 # 소득 보너스 조건 체크
-                        income_pct if income_pct else 0,   # income_min_pct <=
-                        income_pct if income_pct else 999, # income_max_pct >=
-                        age,                        # min_age <=
-                        age,                        # max_age >=
+                        # ── 외부 SELECT 점수 계산 ──
+                        query_embedding,          # 1. embedding <=> %s::vector
+                        sido,             # 4. wt.sido ILIKE %s (지역 보너스)
+                        gender,                # 5. wt.gender = %s (성별 보너스)
+                        household_type,           # 6. household_types @> ARRAY[%s] (가구 보너스)
+                        income_pct,               # 7. income_min_pct <= %s (소득 보너스)
+                        income_pct,               # 8. income_max_pct >= %s (소득 보너스)
+
+                        # ── 내부 서브쿼리 필터링 ──
+                        income_pct,               # 9.  income_min_pct <= %s
+                        income_pct,               # 10. income_max_pct >= %s
+                        age,                      # 11. min_age <= %s
+                        age,                      # 12. max_age >= %s
+                        gender,                # 13. gender IN ('A', %s)
+                        sido,             # 14. sido ILIKE %s
+                        sigungu,          # 15. sigungu ILIKE %s
+                        household_type,           # 16. household_types @> ARRAY[%s]
+                        employment_statuses,        # 17. employment_statuses @> ARRAY[%s]
+                        special_condition,        # 18. special_conditions @> ARRAY[%s]
                     ),
                 )
                 rows = await cur.fetchall()
@@ -182,11 +191,6 @@ async def check_eligibility(
             "recommended_services": services,
         }
     
-    # 예외 처리 (쿼리 실행, 데이터 처리 등에서 발생할 수 있는 모든 예외를 포괄)
-    except TimeoutError as e:
-        logger.error(f"⏰ [ERROR] DB Query Timeout: {e}")
-        return {"error": "DB 쿼리 실행이 시간 초과되었습니다."} 
-
     except Exception as e:
         logger.error(f"❌ Eligibility Error: {e}")
         return {"error": str(e)}

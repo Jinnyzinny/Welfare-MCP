@@ -8,12 +8,6 @@ def score_eligibility_query() -> str:
 
             (1 - (ws.embedding <=> %s::vector))::float AS vector_score,
 
-            (CASE
-                WHEN ws.service_name    LIKE ANY(%s)
-                OR   ws.service_purpose LIKE ANY(%s)
-                THEN 0.5 ELSE 0
-            END)::float AS intent_bonus,
-
             (
                 (CASE
                     WHEN wt.sido IS NULL OR wt.sido = '' THEN 0.1
