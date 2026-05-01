@@ -21,8 +21,8 @@ def get_conninfo():
         return DATABASE_PRIVATE_URL
     return f"host={DB_HOST} port={DB_PORT} dbname={DB_NAME} user={DB_USERNAME} password={DB_PASSWORD}"
 
+# 비동기 DB 풀을 초기화하고 반환
 async def get_db_pool():
-    """비동기 DB 풀을 초기화하고 반환"""
     global db_pool
     if db_pool is None:
         db_pool = AsyncConnectionPool(
