@@ -1,5 +1,6 @@
 def score_eligibility_query() -> str:
     return """
+    SELECT * FROM (
         SELECT
             ws.service_id,
             ws.service_name,
@@ -56,7 +57,8 @@ def score_eligibility_query() -> str:
         JOIN welfare_service  ws using (service_id)
         JOIN welfare_target   wt using (service_id)
         JOIN welfare_criteria wc using (service_id)
+    ) scored
 
-        ORDER BY (vector_score + intent_bonus + profile_bonus) DESC
-        LIMIT 5
+    ORDER BY (vector_score + profile_bonus) DESC
+    LIMIT 5
     """
