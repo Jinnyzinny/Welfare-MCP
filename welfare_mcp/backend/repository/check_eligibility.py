@@ -10,7 +10,7 @@ def score_eligibility_query() -> str:
         ws.contact_info, -- 문의처
         ws.apply_url, -- 신청 URL
         ws.official_required_documents, -- 공식 필수 서류
-        ws.personal_verification_required, -- 본인 인증 필요 여부
+        ws.personal_verification_required -- 본인 인증 필요 여부
     FROM (
         SELECT
             ws.service_id
