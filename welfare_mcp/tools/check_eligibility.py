@@ -125,13 +125,13 @@ async def check_eligibility(
     # # embedding → vector 문자열
     # # -----------------------------
     embedding = model.encode(cleaned_query).tolist()
-    query_embedding = "[" + ",".join(map(str, embedding)) + "]"
+    # query_embedding = "[" + ",".join(map(str, embedding)) + "]"
 
-    target_keywords = extract_intent_keywords(query_text)
+    # target_keywords = extract_intent_keywords(query_text)
 
-    sido_pattern = f"%{sido[:2]}%" if sido else "%"
+    # sido_pattern = f"%{sido[:2]}%" if sido else "%"
     # gender: DB는 A/M/F, tool 파라미터는 ALL/MALE/FEMALE
-    gender_db = {"MALE": "M", "FEMALE": "F", "ALL": "A"}.get(gender, "A")
+    # gender_db = {"MALE": "M", "FEMALE": "F", "ALL": "A"}.get(gender, "A")
 
     try:
         # # -----------------------------
@@ -145,16 +145,16 @@ async def check_eligibility(
                     sql,
                     (
                         # ── 내부 서브쿼리 필터링 ──
-                        income_pct,               # 9.  income_min_pct <= %s
-                        income_pct,               # 10. income_max_pct >= %s
-                        age,                      # 11. min_age <= %s
-                        age,                      # 12. max_age >= %s
-                        gender,                # 13. gender IN ('A', %s)
-                        sido,             # 14. sido ILIKE %s
-                        sigungu,          # 15. sigungu ILIKE %s
-                        household_type,           # 16. household_types @> ARRAY[%s]
-                        employment_statuses,        # 17. employment_statuses @> ARRAY[%s]
-                        special_condition,        # 18. special_conditions @> ARRAY[%s]
+                        income_pct, income_pct,         # 1,2. income_min_pct
+                        income_pct, income_pct,         # 3,4. income_max_pct
+                        age, age,                       # 5,6. min_age
+                        age, age,                       # 7,8. max_age
+                        gender, gender,                 # 9,10. gender
+                        sido, sido,                     # 11,12. sido
+                        sigungu, sigungu,               # 13,14. sigungu
+                        [household_type] if household_type else [], [household_type] if household_type else [],  # 15,16. household_types
+                        employment_statuses or [], employment_statuses or [],  # 17,18. employment_statuses
+                        special_condition or [], special_condition or [],      # 19,20. special_conditions
                     ),
                 )
                 rows = await cur.fetchall()
@@ -171,14 +171,6 @@ async def check_eligibility(
                 "name": r["service_name"],
                 "purpose": r["service_purpose"],
                 "url": r["apply_url"] or "",
-                "score_breakdown": {
-                    "vector": round(r["vector_score"], 2),
-                    "intent": round(r["intent_bonus"], 2),
-                    "profile": round(r["profile_bonus"], 2),
-                    "total": round(
-                        r["vector_score"] + r["intent_bonus"] + r["profile_bonus"], 2
-                    ),
-                },
             }
             for r in rows
         ]
@@ -186,7 +178,6 @@ async def check_eligibility(
         # 최종 결과 반환
         return {
             "count": len(services),
-            "search_strategy": "Semantic + Intent + Profile",
             "recommended_services": services,
         }
     
