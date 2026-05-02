@@ -1,6 +1,7 @@
 def score_eligibility_query() -> str:
     return """
     SELECT 
+        ws.service_id, -- 서비스 ID
         ws.support_type, -- 지원 유형
         ws.service_name, -- 서비스명
         ws.service_purpose, -- 서비스 목적
