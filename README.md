@@ -1,82 +1,85 @@
-본 MCP는 개인정보를 저장하지 않고,
-사용자 상태를 정규화하여
-복지 서비스의 신청 가능성과 준비 서류를
-사전 안내하는 Stateless 지원 도우미입니다.
-
 # Welfare Services MCP
 
-> Stateless MCP Server for Welfare Eligibility Pre-Check and Required Documents Guidance
+> 개인정보를 저장하지 않고, 복지 서비스 신청 가능성과 준비 서류를 사전 안내하는 Stateless MCP Server
+
+# 사용 방법
+
+1. Claude의 입력 창 아래 + 버튼을 누른다면 커넥터 버튼이 나옵니다.
+   <img width="732" height="409" alt="image" src="https://github.com/user-attachments/assets/ccf9487a-9b68-4ea3-890d-1540a0860243" />
+2. Connector 버튼을 확인했다면 커넥터 관리 버튼을 클릭해주세요.
+   <img width="763" height="419" alt="image" src="https://github.com/user-attachments/assets/c13964ea-bd7b-4ae0-ba6f-6bf3190e26ef" />
+3. 커넥터 관리 버튼을 클릭했다면 오른쪽 상단의 + 버튼을 클릭한 뒤, Custom Connector(커스텀 커넥터) 추가 버튼을 클릭하세요.
+   <img width="275" height="112" alt="image" src="https://github.com/user-attachments/assets/110d8d9d-4828-4743-a596-a8b38dd88099" />
+4. 이름 : 대한민국 복지 MCP 서버 <br>
+   원격 MCP 서버 URL : https://welfare-mcpserver.shop 을 입력해주세요.
+   <img width="530" height="433" alt="image" src="https://github.com/user-attachments/assets/6bcf81ae-f2b5-4945-a5d5-22427167b5bc" />
+5. 내게 맞는 서비스를 검색하세요.
 
 ---
 
-## 📌 프로젝트 개요
+## 프로젝트 개요
 
-**Welfare Services MCP**는  
-개인정보를 저장하지 않고, 최소한의 사용자 상태 정보를 정규화하여  
-복지 서비스의 **신청 가능성**과 **준비 서류**를 사전에 안내하는  
-**Stateless MCP Server**입니다.
+**Welfare Services MCP**는 공공 복지 서비스에 대한 **사전 자가진단** 도구입니다.
 
-본 MCP는 PlayMCP 플랫폼에서 요구하는 MCP 철학을 충실히 따릅니다.
+사용자의 나이·지역·소득·가구 형태 등 최소한의 상태 정보를 정규화하여 신청 가능성이 높은 복지 서비스를 추천하고, 필요한 구비서류를 사전에 안내합니다. 개인정보(주민번호, 금융정보 등)를 저장하지 않으며, 모든 상태는 Agent가 세션 내에서 JSON으로 관리합니다.
 
-- **Resource**: 공공 복지 서비스 원문 데이터 제공
-- **Tool**: 사용자 상태 수집 및 해석
-- **Agent**: 상태 오케스트레이션 및 사용자 설명
+[PlayMCP](https://playmcp.io) 플랫폼 규격의 MCP 철학을 따릅니다.
 
 ---
 
-## 🎯 설계 목표
+## 주요 특징
 
-- 개인정보 최소 수집 (금액, 주민번호 등 ❌)
-- 최소 질문 수 기반 사용자 상태 정규화
-- 공공데이터(OpenAPI) 원문 훼손 없이 해석만 수행
-- "확정"이 아닌 **사전 자가진단** 서비스 제공
-
----
-
-## 🧠 MCP 아키텍처
-
-- MCP Server는 **UserProfile을 저장하지 않습니다**
-- 모든 상태는 **Agent가 JSON으로 전달**합니다
+- **무상태(Stateless)**: 개인정보 비저장, 세션 없음 — 확장성과 프라이버시 보장
+- **의미 기반 검색**: 한국어 임베딩(pgvector)으로 자연어 질의와 복지 서비스 매칭
+- **LLM 정규화**: Claude Batch API(Haiku)로 비정형 지원 대상·선정 기준 텍스트를 구조화
+- **사전 진단**: 최종 수급 결정이 아닌 신청 가능성 사전 안내 목적
 
 ---
 
-## 🧩 도메인 모델
+## 시스템 아키텍처
 
-### UserProfile (정규화된 사용자 상태)
-
-```json
-{
-  "age_group": "YOUTH",
-  "income_level": "MEDIAN_50_100",
-  "employment_status": "UNEMPLOYED",
-  "household_type": "SINGLE",
-  "special_status": [],
-  "assets": {
-    "has_real_estate": false,
-    "has_vehicle": false
-  }
-}
+```
+공공 OpenAPI (gov24)
+        │
+        ▼
+  ┌─────────────┐
+  │    batch    │  페이지 수집 + 벡터 임베딩 생성
+  │             │  Advisory Lock + Checkpoint 기반 안정 실행
+  └──────┬──────┘
+         │
+         ▼
+  welfare_service (PostgreSQL + pgvector)
+         │
+         ▼
+  ┌─────────────┐
+  │  normalize  │  Claude Batch API (Haiku)로 지원 대상·선정 기준 정규화
+  │             │  10,000건 청크 단위 비동기 처리
+  └──────┬──────┘
+         │
+         ▼
+  welfare_target / welfare_criteria
+         │
+         ▼
+  ┌─────────────┐
+  │ welfare_mcp │  MCP Tool (check_eligibility, required_documents)
+  │  FastMCP    │  Streamable HTTP / Stateless
+  └─────────────┘
 ```
 
-## 🔍 검색 전략
+### 모듈 구성
 
-`check_eligibility` 툴은 세 가지 점수를 합산하여 복지 서비스를 추천합니다.
-
-| 전략              | 설명                                                          | 가중치        |
-| ----------------- | ------------------------------------------------------------- | ------------- |
-| **Vector Score**  | `jhgan/ko-sroberta-multitask` 임베딩 코사인 유사도 (pgvector) | 기본 점수     |
-| **Intent Bonus**  | 취업·주거·창업 등 의도 키워드 일치 여부                       | +0.5          |
-| **Profile Bonus** | 지역 / 성별 / 가구 형태 / 소득 기준 프로필 매칭               | +0.05 ~ +0.20 |
-
-최종적으로 상위 5개 서비스를 반환합니다.
+| 모듈           | 역할                                            |
+| -------------- | ----------------------------------------------- |
+| `batch/`       | 공공 OpenAPI 데이터 수집 및 벡터 임베딩 생성    |
+| `normalize/`   | Claude Batch API로 복지 서비스 자격 기준 구조화 |
+| `welfare_mcp/` | MCP 도구 및 프롬프트 제공 (FastMCP 서버)        |
+| `db/`          | PostgreSQL 마이그레이션 스크립트                |
 
 ---
 
-## 🛠 MCP Tools
+## MCP Tools
 
 ### `check_eligibility`
-
-사용자의 나이, 성별, 지역, 가구 형태, 소득 수준과 자연어 질문을 기반으로 복지 서비스를 추천합니다.
 
 **응답 예시**
 
@@ -101,75 +104,45 @@
 }
 ```
 
----
+## 데이터 파이프라인
 
-### `required_documents`
+### Batch 수집
 
-선택한 서비스 ID의 구비서류 목록을 조회하고, 사용자 프로필에 따른 조건부 서류를 안내합니다.
+공공 OpenAPI(`gov24/v3/serviceDetail`)에서 복지 서비스 데이터를 수집하고 벡터 임베딩을 생성합니다.
 
-**응답 예시**
+- **Advisory Lock**: PostgreSQL Advisory Lock으로 동시 실행 방지
+- **Checkpoint**: 페이지 단위로 진행 상태를 저장, 실패 시 이어서 재실행
+- **Upsert**: `ON CONFLICT DO UPDATE`로 중복 없이 최신 데이터 유지
+- **임베딩 모델**: `jhgan/ko-sroberta-multitask` (768차원, 한국어 특화)
 
-```json
-{
-  "service_name": "청년 취업 지원 사업",
-  "required_now": ["신분증 사본", "주민등록등본"],
-  "verified_by_officer": ["건강보험료 납부확인서"],
-  "conditional_by_profile": ["고용보험 미가입 확인서"],
-  "apply_url": "https://www.bokjiro.go.kr/...",
-  "status": "success"
-}
-```
+### Normalize 정규화
 
-## ⚙️ 데이터 파이프라인
+비정형 텍스트(지원 대상, 선정 기준)를 Claude Batch API로 구조화된 JSON으로 변환합니다.
 
-```
-공공 OpenAPI
-    │
-    ▼
-[batch] 페이지 단위 수집 + 벡터 임베딩 생성
-    │  Advisory Lock + Checkpoint 기반 안정적 실행
-    ▼
-welfare_service (PostgreSQL + pgvector)
-    │
-    ▼
-[normalize] Claude Batch API (Haiku) 로 지원 대상·선정 기준 정규화
-    │  10,000건 청크 단위 비동기 처리
-    ▼
-welfare_target / welfare_criteria
-    │
-    ▼
-[welfare_mcp] MCP Tool로 검색 · 서류 안내
-```
+- **모델**: `claude-haiku-4-5-20251001` (비용 최적화)
+- **Prompt Caching**: 시스템 프롬프트 캐싱으로 반복 전송 비용 절감
+- **배치 크기**: 건당 10,000건 청크 처리 (API 최대 100,000건)
+- **SAVEPOINT**: 개별 레코드 실패 격리 → 일부 오류 시 전체 트랜잭션 유지
 
-### 배치 특징
-
-- **Advisory Lock**: 동시에 여러 프로세스가 실행되지 않도록 PostgreSQL Advisory Lock 사용
-- **Checkpoint**: 페이지 단위로 진행 상태를 저장, 실패 시 이어서 재실행 가능
-- **Upsert**: `ON CONFLICT DO UPDATE` 로 중복 수집 없이 최신 데이터 유지
-
-### 정규화 특징
-
-- **Claude Message Batches API** 사용 → 대량 처리 비용 절감
-- **Prompt Caching** (`cache_control: ephemeral`) → 시스템 프롬프트 반복 전송 비용 최소화
-- **SAVEPOINT** 기반 개별 레코드 실패 격리 → 일부 실패 시 전체 트랜잭션 유지
-
----
-
-## 🔧 기술 스택
+## 기술 스택
 
 | 분류          | 기술                                                                            |
 | ------------- | ------------------------------------------------------------------------------- |
 | MCP Framework | [FastMCP](https://github.com/modelcontextprotocol/python-sdk) (Streamable HTTP) |
 | Web Framework | Starlette + Uvicorn                                                             |
-| DB            | PostgreSQL + [pgvector](https://github.com/pgvector/pgvector)                   |
-| DB 드라이버   | psycopg3 (비동기, psycopg_pool)                                                 |
+| Database      | PostgreSQL + [pgvector](https://github.com/pgvector/pgvector)                   |
+| DB 드라이버   | psycopg3 (비동기)                                                               |
 | 임베딩 모델   | `jhgan/ko-sroberta-multitask` (sentence-transformers)                           |
-| AI            | Anthropic Claude Haiku (Message Batches API)                                    |
+| LLM           | Anthropic Claude Haiku (Message Batches API)                                    |
 | 언어          | Python 3.13                                                                     |
 | 컨테이너      | Docker                                                                          |
-| CI/CD         | GitHub Actions → Docker Hub → AWS LightSail                                     |
+| CI/CD         | GitHub Actions → Docker Hub → Railway                                           |
 
-## ⚠️ 면책 조항
+---
 
-본 서비스는 복지 서비스 신청 가능성을 **사전 자가진단**하는 용도로만 제공됩니다.  
+## 면책 조항
+
+본 서비스는 복지 서비스 신청 가능성을 **사전 자가진단**하는 용도로만 제공됩니다.
 실제 수급 자격은 담당 기관의 공식 심사를 통해 결정되며, 본 MCP의 결과는 법적 효력을 갖지 않습니다.
+
+Cloud Instance 이관에 도움을 주신 @chrisryugj 님께 감사드립니다.
