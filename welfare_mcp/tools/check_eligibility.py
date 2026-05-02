@@ -76,12 +76,12 @@ def extract_intent_keywords(query: str) -> List[str]:
 # -------------------------------------------------
 @mcp.tool(
     name="check_eligibility",
-    description="사용자의 나이, 성별, 지역, 가구형태, 소득수준, 질문을 기반으로 복지 서비스를 추천합니다",
+    description="쿼리 텍스트 원문, 사용자의 나이, 성별, 지역, 가구형태, 소득수준, 고용 상태, 특별 조건 질문을 기반으로 복지 서비스를 추천합니다",
 )
 async def check_eligibility(
     query_text: str,
     age: int,
-    gender: Literal["MALE", "FEMALE", "ALL"] = "ALL",
+    gender: Literal["M", "F", "A"] = "A",
     sido: str | None = None,
     sigungu: str | None = None,
     household_type: str | None = None,
@@ -93,11 +93,13 @@ async def check_eligibility(
     Args:
         query_text    : 자연어 검색어
         age           : 사용자 나이
-        gender        : MALE | FEMALE | ALL
+        gender        : M | F | A
         sido          : 시/도 (예: 서울특별시)
         sigungu       : 시/군/구 (예: 강남구)
         household_type: 가구 형태 태그 (예: 한부모, 다자녀, 1인가구)
         income_pct    : 중위소득 % (예: 50 → 중위소득 50%)
+        employment_statuses: 고용 상태 태그 (예: 고용, 실업, 재직)
+        special_condition: 특별 조건 태그 (예: 장애인, 아동)
     """
     # mcp 함수 호출 시점 로그
     logger.info(f"[INFO] check_eligibility function called")
@@ -143,7 +145,6 @@ async def check_eligibility(
                     sql,
                     (
                         # ── 외부 SELECT 점수 계산 ──
-                        query_embedding,          # 1. embedding <=> %s::vector
                         sido,             # 4. wt.sido ILIKE %s (지역 보너스)
                         gender,                # 5. wt.gender = %s (성별 보너스)
                         household_type,           # 6. household_types @> ARRAY[%s] (가구 보너스)
@@ -164,6 +165,11 @@ async def check_eligibility(
                     ),
                 )
                 rows = await cur.fetchall()
+
+                # 조건에 맞는 서비스가 없는 경우 예외 처리
+                if rows is None:
+                    logger.info(f"[INFO] 해당 조건에 맞는 서비스를 찾을 수 없습니다.")
+                    raise ValueError("조건에 맞는 서비스를 찾을 수 없습니다.")
                 
         # 서비스별 점수 계산 및 정렬
         services = [
