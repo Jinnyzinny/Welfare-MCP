@@ -155,6 +155,9 @@ async def check_eligibility(
                         [household_type] if household_type else None, [household_type] if household_type else None,  # 15,16. household_types
                         employment_statuses or None, employment_statuses or None,  # 17,18. employment_statuses
                         special_condition or None, special_condition or None,      # 19,20. special_conditions
+
+                        # -- 외부 정렬 기준 --
+                        embedding,
                     ),
                 )
                 rows = await cur.fetchall()
