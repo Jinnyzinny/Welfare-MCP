@@ -144,13 +144,6 @@ async def check_eligibility(
                 await cur.execute(
                     sql,
                     (
-                        # ── 외부 SELECT 점수 계산 ──
-                        sido,             # 4. wt.sido ILIKE %s (지역 보너스)
-                        gender,                # 5. wt.gender = %s (성별 보너스)
-                        household_type,           # 6. household_types @> ARRAY[%s] (가구 보너스)
-                        income_pct,               # 7. income_min_pct <= %s (소득 보너스)
-                        income_pct,               # 8. income_max_pct >= %s (소득 보너스)
-
                         # ── 내부 서브쿼리 필터링 ──
                         income_pct,               # 9.  income_min_pct <= %s
                         income_pct,               # 10. income_max_pct >= %s
