@@ -145,4 +145,4 @@
 본 서비스는 복지 서비스 신청 가능성을 **사전 자가진단**하는 용도로만 제공됩니다.
 실제 수급 자격은 담당 기관의 공식 심사를 통해 결정되며, 본 MCP의 결과는 법적 효력을 갖지 않습니다.
 
-Cloud Instance 이관에 도움을 주신 @chrisryugj 님께 감사드립니다.
+Cloud Instance 이관에 도움을 주신 <a href="https://github.com/chrisryugj">@chrisryugj</a> 님께 감사드립니다.
