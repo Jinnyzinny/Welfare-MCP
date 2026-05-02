@@ -27,9 +27,7 @@ async def get_db_pool():
     if db_pool is None:
         db_pool = AsyncConnectionPool(
             conninfo=get_conninfo(),
-            min_size=1,
-            max_size=3,
-            timeout=5.0,
+            max_size=30, # 최대 커넥션 수
             open=False # 필요할 때 열도록 설정
         )
         await db_pool.open() # 비동기로 풀 오픈
