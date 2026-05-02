@@ -7,8 +7,6 @@ def score_eligibility_query() -> str:
             ws.service_purpose,
             ws.apply_url,
 
-            (1 - (ws.embedding <=> %s::vector))::float AS vector_score,
-
             (
                 (CASE
                     WHEN wt.sido IS NULL OR wt.sido = '' THEN 0.1

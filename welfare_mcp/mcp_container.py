@@ -47,8 +47,13 @@ base_app = Starlette(
 # CORS 미들웨어 설정
 app = CORSMiddleware(
     base_app,
-    allow_origins=["*"],
-    allow_headers=["*"],
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_origins=[
+        "https://welfare-mcpserver.shop"
+    ],
+    allow_headers=[
+        "Content-Type",
+        "Mcp-Session-Id"
+    ],
+    allow_methods=["GET", "POST"],
     expose_headers=["Mcp-Session-Id"],
 )
