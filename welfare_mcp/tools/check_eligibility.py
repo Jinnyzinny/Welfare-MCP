@@ -152,9 +152,9 @@ async def check_eligibility(
                         gender, gender,                 # 9,10. gender
                         sido, sido,                     # 11,12. sido
                         sigungu, sigungu,               # 13,14. sigungu
-                        [household_type] if household_type else [], [household_type] if household_type else [],  # 15,16. household_types
-                        employment_statuses or [], employment_statuses or [],  # 17,18. employment_statuses
-                        special_condition or [], special_condition or [],      # 19,20. special_conditions
+                        [household_type] if household_type else None, [household_type] if household_type else None,  # 15,16. household_types
+                        employment_statuses or None, employment_statuses or None,  # 17,18. employment_statuses
+                        special_condition or None, special_condition or None,      # 19,20. special_conditions
                     ),
                 )
                 rows = await cur.fetchall()

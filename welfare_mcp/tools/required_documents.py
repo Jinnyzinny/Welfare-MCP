@@ -14,7 +14,6 @@ from backend.DB_Connection import get_db_pool, close_db_pool
 # _init_lock = threading.Lock()
 sem = threading.Semaphore(1)
 
-
 # -------------------------------------------------
 # MCP Tool Definition
 # -------------------------------------------------
@@ -60,7 +59,7 @@ async def required_documents(
             """
 
             # DB에서 서비스 ID에 해당하는 행을 가져옴
-            with db_pool.acquire(timeout=10.0) as conn:
+            with db_pool.acquire(timeout=5.0) as conn:
                 row = conn.fetchrow(query, service_id)
 
             # 데이터가 아예 없는 경우
@@ -128,8 +127,5 @@ async def required_documents(
         except Exception as e:
             logger.error(f"❌ Required Documents Error: {e}")
             return {"error": f"조회 중 오류 발생: {str(e)}"}
-        
-    try:
-        await close_db_pool()
-    except Exception as e:
-        logger.error(f"❌ DB Pool Close Error: {e}")    
+        finally:
+            await close_db_pool() 
