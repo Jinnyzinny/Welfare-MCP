@@ -1,6 +1,6 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from welfare_mcp.mcp_container import mcp, app
+from mcp_container import mcp, app
 
 # from tools.user_profile import collect_basic_profile, collect_household_profile
 from tools.check_eligibility import check_eligibility
